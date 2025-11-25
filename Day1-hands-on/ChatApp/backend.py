@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from huggingface_hub import InferenceClient
 from starlette.concurrency import run_in_threadpool
+from typing import Dict, List, Any
 
 # --- Configuration ---
 # NOTE: This API key must be available in the environment where the backend is run.
@@ -12,9 +13,22 @@ API_BASE_URL = "https://router.huggingface.co/v1/"
 MAX_TOKENS = 50
 TEMPERATURE = 0.7
 
+# Define the initial system message
+SYSTEM_MESSAGE = {
+    "role": "system",
+    "content": "You are friendly, detail oriented and concise AI assistant named 'HUGG'. Keep your answers accurate and brief."
+}
+
+# --- State Management (In-Memory History Store) ---
+# Stores the chat history for each unique user ID.
+# Key: user_id (str) | Value: List[Dict[str, str]] (Message history)
+# NOTE: In a production environment, this would be replaced by a proper database (e.g., Redis, PostgreSQL)
+chat_history_store: Dict[str, List[Dict[str, str]]] = {}
+
 # --- Data Model for API Request Body ----
-class ChatRequest(BaseModel):
-    messages: list
+class ChatPrompt(BaseModel):
+    user_id:str
+    prompt:str
 
 # --- Hugging Face Client Initialization Function ---
 
@@ -104,23 +118,42 @@ async def async_call_hf_api(
 
 # --- API Endpoint ---
 @app.post("/chat/complete")
-async def chat_complete(request: ChatRequest):
+async def chat_prompt(request: ChatPrompt):
     """
     Receives the chat history and returns the LLM response.
     """
+
+    user_id = request.user_id
+    prompt = request.prompt
+
+    # 1. Initialize history for the user if it doesn't exist
+    if user_id not in chat_history_store:
+        chat_history_store[user_id] = [SYSTEM_MESSAGE]
+    
+    user_message = {"role":"user", "content":prompt}
+    chat_history_store[user_id].append(user_message)
+
     try:
+        full_context = chat_history_store[user_id]
         response_text = await async_call_hf_api(
             client=hf_client,
-            messages=request.messages,
+            messages=full_context,
             model=MODEL_ID,
             max_tokens=MAX_TOKENS,
             temperature=TEMPERATURE
         )
-        return {"response": response_text}
+
+        assistant_message = {"role":"assistant", "content": response_text}
+        chat_history_store[user_id].append(assistant_message)
+
+        return {"response": response_text, "full_history": chat_history_store[user_id]}
+
     except HTTPException as e:
+        chat_history_store[user_id].pop()
         raise e
     except Exception as e:
         # This catches errors not explicitly handled in call_hf_api
+        chat_history_store[user_id].pop()
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
 
