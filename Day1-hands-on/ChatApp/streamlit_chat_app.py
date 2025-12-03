@@ -1,89 +1,191 @@
-import os
 import streamlit as st
-import time
 import httpx # New Import for Asynchronous HTTP Client
 import uuid # Used for session ID
 import anyio # New Import to run async code in Streamlit
 from typing import List, Dict, Any
 
+# --- Custom Exception for Error Propagation ---
+class FetchHistoryError(Exception):
+    """Custom exception to wrap and propagate human-readable errors from history fetching."""
+    pass
+
 # --- Configuration ---
 # NOTE: Adjust this URL based on where your FastAPI backend is running.
-BACKEND_URL = "http://localhost:8000/chat/complete"
+POST_URL = "http://localhost:8000/chat/prompt" # For sending prompt
+GET_URL = "http://localhost:8000/chat/history" # For fetching history
+CLEAR_URL = "http://localhost:8000/chat/history/clear" # New URL for clearing history
 
-
-# --- 1. Initialization (Ephemeral Session State) ---
+# --- 1. Initialization ---
 
 # We will use a unique session ID for the user
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = str(uuid.uuid4())
-USER_ID = st.session_state.user_id
+if 'session_id' not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+SESSION_ID = st.session_state.session_id
 
-# Initialize chat history in session state (in-memory)
-if "messages" not in st.session_state:
-    st.session_state.messages = [
-        {
-            "role": "system",
-            "content": "You are friendly, detail oriented and concise AI assistant named 'HUGG'. Keep your answers accurate and brief."
-        }
-    ]
-
+# Temporary state for processing lock and prompt storage
 if 'is_processing' not in st.session_state:
     st.session_state.is_processing = False
-
-# Temporary storage for the prompt after the first rerun (only used internally)
 if '_temp_prompt' not in st.session_state:
     st.session_state._temp_prompt = None
+# New state for history error tracking
+if 'history_error' not in st.session_state:
+    st.session_state.history_error = None
+# Initialize messages, which will be overwritten by the GET call.
+# Messages now hold the full HistoryMessage dictionary structure.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+def run_async_task(task_func, *args):
+    """Synchronous wrapper for running async functions."""
+    return anyio.run(task_func, *args)
+
+async def async_handle_backend_error(response: httpx.Response) -> str:
+    """Helper to extract meaningful, human-readable error message from 4xx/5xx responses."""
+
+    try:
+        # Try to parse a JSON error body from the backend (FastAPI's HTTPException format)
+        error_data = response.json()
+        if isinstance(error_data, dict) and 'detail' in error_data:
+            detail = error_data['detail']
+
+            if isinstance(detail, dict) and 'message' in detail:
+                # Human-readable message from backend logic (good UX)
+                return f"Server Error ({response.status_code}): {detail['message']}"
+
+            return f"Server Error ({response.status_code}): {detail}"
+        # Fallback if the error response is not in the expected JSON format
+        return f"Server Error ({response.status_code}): {response.reason_phrase}"
+
+    except:
+        # Fallback if response is not JSON parseable
+        return f"Server Error ({response.status_code}): Could not parse error details."   
+
+
+async def async_clear_history():
+    """Sends a DELETE request to clear the history for the current session."""
+    final_clear_url = f"{CLEAR_URL}?session_id={SESSION_ID}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            st.toast("Clearing chat history...", icon="🗑️")
+            response = await client.delete(final_clear_url)
+            response.raise_for_status()
+
+            # On success (204 No Content), clear local state immediately
+            st.session_state.messages = []
+            st.toast("Chat history cleared!", icon="✅")
+    
+    except httpx.HTTPStatusError as e:
+        error_msg = await async_handle_backend_error(e.response)
+        st.error(f"Failed to clear history: {error_msg}")
+
+    except httpx.RequestError as e:
+        st.error(f"Connection Error: Failed to clear history. (Check if FastAPI is running)")
+    
+    except Exception as e:
+        st.error(f"An unexpected error occurred while clearing history: {e}")
+
 
 # --- 2. Streamlit UI Setup ---
 
 st.set_page_config(page_title="Hugg Chatbot", layout="centered")
-st.title("🤖 Hugg: AI Assistant (Ephemeral Session)")
-st.caption(f"Session User ID: {USER_ID[:8]}...")
-st.caption("Backend: FastAPI | Persistence: None (History resets on tab close)")
+
+# Use columns for layout: Title/Caption on the left, Button on the right
+col1, col2 = st.columns([3, 1])
+
+with col1:
+    st.title("🤖 Hugg: AI Assistant")
+    st.caption(f"Session ID: {SESSION_ID[:8]}...")
+    st.caption("Backend: FastAPI | Persistence: MongoDB")
+
+with col2:
+    if st.button("Clear History", use_container_width=True, disabled=st.session_state.is_processing or len(st.session_state.messages) == 0):
+        if st.session_state.messages: # Only proceed if there are messages to clear
+            st.session_state.is_processing = True
+            run_async_task(async_clear_history)
+            st.session_state.is_processing = False
+            # Rerun to display cleared state
+            st.rerun()
 
 # --- 3. Communication Logic (HTTP Request to FastAPI Backend) ---
 
-async def async_get_ai_response_from_backend(user_prompt: str) -> List[Dict[str,str]] | str:
-    """
-    Makes an ASYNC HTTP POST request to the FastAPI backend with the message history.
-    """
-
-    payload = {"user_id": USER_ID, "prompt": user_prompt}
+async def async_get_ai_response_from_backend(user_prompt: str) -> str:
+    """Sends prompt via POST and expects only the inference response text."""
+    headers = {"session-id": SESSION_ID}
+    payload = {"prompt": user_prompt}
 
     try: 
         async with httpx.AsyncClient(timeout=15.0) as client:
             # Send the request to the backend
-            response = await client.post(BACKEND_URL, json=payload)
+            response = await client.post(POST_URL, json=payload, headers=headers)
             response.raise_for_status()
 
-            response_data = response.json()
+            return response.json().get("response", "Error: Backend response missing 'response' field.")
 
-            full_history = response_data.get("full_history", [])
+    except httpx.HTTPStatusError as e:
+        # 2a. Catch HTTP Status Errors (4xx, 5xx) raised by raise_for_status
+        # Use the helper to format the error from the response body
+        return await async_handle_backend_error(e.response)
 
-            if full_history:
-                return full_history
-            else:
-                return "Error: Backend response missing 'response' field."
-
-    except httpx.RequestException as e:
-        # Handle connection errors or bad HTTP status codes immediately
-        return f"Error: Failed to communicate with backend service at {BACKEND_URL}. ({e})"
+    except httpx.RequestError as e:
+        # 2b. Catch Connection/Network Errors (e.g., DNS, Timeout)
+        return f"Connection Error: Failed to communicate with backend service at {POST_URL}. (Check if FastAPI is running)"
+    
     except Exception as e:
-        return f"An unexpected error occurred while processing backend response: {e}"
+        # Handle any other unexpected Python exceptions
+        return f"An unexpected client-side error occurred: {e}"
 
-def get_ai_response_from_backend(user_promt: str) -> List[Dict[str,str]] | str:
-    """
-    Synchronous wrapper to run the async request function using anyio.
-    """
-    return anyio.run(async_get_ai_response_from_backend, user_promt)
+async def async_fetch_history() -> List[Dict[str,Any]]:
+    """Fetches the full history (HistoryMessage structure) from the backend GET endpoint."""
+    final_get_url = f"{GET_URL}?session_id={SESSION_ID}"
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(final_get_url)
+            response.raise_for_status()
+            
+            history = response.json().get("history", [])
+            if isinstance(history, list):
+                return history
+            else:
+                # Backend success response has invalid payload structure
+                raise FetchHistoryError("Backend returned history in an invalid format.")
+
+    except httpx.HTTPStatusError as e:
+        # Catch HTTP Status Errors (4xx, 5xx) raised by raise_for_status
+        error_msg = await async_handle_backend_error(e.response)
+        raise FetchHistoryError(error_msg)
+
+    except httpx.RequestError as e:
+        # Catch Connection/Network Errors
+        raise FetchHistoryError(f"Connection Error: Failed to fetch history. (Check if FastAPI is running)")
+    
+    except Exception as e:
+        # Handle any other unexpected Python exceptions
+        raise FetchHistoryError(f"An unexpected client-side error occurred while fetching history: {e}")   
 
 
-# Display all messages (excluding the initial system message)
+# --- 4. History Refresh Logic (Run on every rerun) ---
+if not st.session_state.is_processing:
+    history_result = run_async_task(async_fetch_history)
+    if isinstance(history_result, list):
+        st.session_state.messages = history_result
+    elif len(st.session_state.messages) == 0:
+        st.error(history_result)
+
+# Display history error if present
+if st.session_state.history_error:
+    st.error(st.session_state.history_error)
+
+# --- 5. History Display Loop ---
+# Displays the current history fetched
 for message in st.session_state.messages:
-    if message['role'] != 'system':
-        avatar = "👤" if message['role'] == "user" else "🤖"
-        with st.chat_message(message["role"], avatar=avatar):
-            st.markdown(message["content"])
+    # 💡 IMPORTANT: Extracting 'role' and 'content' from the full HistoryMessage dict
+    role = message.get('role', 'unknown')
+    content = message.get('content', 'Error: Message content missing.')
+    avatar = "👤" if message['role'] == "user" else "🤖"
+    with st.chat_message(message["role"], avatar=avatar):
+        st.markdown(message["content"])
 
 # --- 5. Handle New Input (In-Memory Logic + Backend Call) ---
 
@@ -92,14 +194,12 @@ if prompt := st.chat_input("Ask Hugg something...", disabled=st.session_state.is
     # 1. Start Processing: Set state to True and trigger a rerun to disable the input field
     st.session_state._temp_prompt = prompt
     st.session_state.is_processing = True
-    # st.session_state.messages.append({"role": "user", "content": prompt})
     st.rerun()
 
 # 6. Process the Response (This runs on the subsequent rerun)
 if st.session_state.is_processing and st.session_state._temp_prompt:
 
     user_prompt_to_send = st.session_state._temp_prompt
-    st.session_state.messages.append({"role": "user", "content": user_prompt_to_send})
 
     with st.chat_message("user", avatar="👤"):
         st.markdown(user_prompt_to_send)
@@ -107,20 +207,13 @@ if st.session_state.is_processing and st.session_state._temp_prompt:
     # Get AI Response from FastAPI Backend
     with st.spinner("Hugg is thinking..."):
         # context_messages = st.session_state.messages
-        backend_response = get_ai_response_from_backend(user_prompt_to_send)
+        backend_response = run_async_task(async_get_ai_response_from_backend, user_prompt_to_send)
     
-    # Update State
-    if isinstance(backend_response, list):
-        st.session_state.messages = backend_response
-    else:
-        st.session_state.messages.append({"role":"assistant", "content": backend_response})
-
-    # Append Assistant Message to In-Memory History
-    # st.session_state.messages.append({"role": "assistant", "content": ai_response})
-
-    # Render the Assistant Message
-    # with st.chat_message("assistant", avatar="🤖"):
-    #     st.markdown(ai_response)
+    with st.chat_message("assistant", avatar="🤖"):
+        if backend_response.startswith(("Connection Error:", "Server Error:")):
+            st.error(backend_response)
+        else:
+            st.markdown(backend_response)
 
     # 6. Unlock the input and trigger final rerun
     st.session_state._temp_prompt = None # Clear temporary storage
