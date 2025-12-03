@@ -37,11 +37,15 @@ def sync_call_hf_api(
 
 async def generate_response(
     session_id:str,
-    prompt:str
+    prompt:str,
+    request_id:str,
+    correlation_id:str
 ) -> str:
     """
     Manages history, calls the LLM, updates history, and returns only the response text.
     """
+
+    log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [SID:{session_id[:8]}]"
 
     # 1. Initialize history for a new session (it will start empty)
     history_message = await run_in_threadpool(MONGO_CHAT_CLIENT.get_history, session_id)
@@ -53,7 +57,7 @@ async def generate_response(
         content=prompt
     )
     history_message.append(user_message)
-    logger.debug(f"Appended user message to history for session: {session_id[:8]}...")
+    logger.debug(f"{log_prefix} Appended user message to history for session: {session_id[:8]}...")
 
     # 3. CRITICAL: Construct the inference context list
     # The context list MUST START with the system message
@@ -78,7 +82,7 @@ async def generate_response(
         )
 
         await run_in_threadpool(MONGO_CHAT_CLIENT.save_messages, session_id, [user_message, assistant_message])
-        logger.info(f"Successfully generated and stored response for session: {session_id[:8]}...")
+        logger.info(f"{log_prefix} Successfully generated and stored response for session: {session_id[:8]}...")
 
         return response_text
 
@@ -91,39 +95,55 @@ async def generate_response(
         await run_in_threadpool(MONGO_CHAT_CLIENT.save_messages, session_id, [user_message, error_message])
         detail_msg = f"LLM inference failure. {str(e)}"
 
-        logger.error(f"Failed to generate response for session {session_id[:8]}...: {detail_msg}")
+        logger.error(f"{log_prefix} Failed to generate response for session {session_id[:8]}...: {detail_msg}")
         raise HTTPException(
             status_code=500, 
             detail={"error": "LLM_INFERENCE_FAILED", "message": detail_msg}
         )
         
-async def get_history(session_id:str) -> List[HistoryMessage]:
+async def get_history(
+    session_id:str,
+    request_id:str,
+    correlation_id:str,
+    limit: int = 10,
+    offset: int = 0
+) -> List[HistoryMessage]:
     """Retrieves the chat history for a given session ID."""
+
+    log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [SID:{session_id[:8]}]"
 
     # If session is new or invalid, return an empty list
     try: 
-        history_list = await run_in_threadpool(MONGO_CHAT_CLIENT.get_history, session_id)
+        history_list = await run_in_threadpool(MONGO_CHAT_CLIENT.get_history, session_id, limit, offset)
 
         if not history_list:
-            logger.warning(f"No history found for session: {session_id[:8]}...")
+            logger.warning(f"{log_prefix} No history found for session: {session_id[:8]}...")
             return []
         
         return history_list
         
     except Exception as e:
         # Catch any exceptions during MongoDB I/O and raise a clean HTTPException
-        logger.error(f"Failed to retrieve history for {session_id[:8]}...: {e}")
+        logger.error(f"{log_prefix} Failed to retrieve history for {session_id[:8]}...: {e}")
         raise HTTPException(
             status_code=500, 
             detail={"error": "DATABASE_ERROR", "message": f"Failed to retrieve chat history from database: {e}"}
         )
 
-async def clear_history(session_id:str):
+async def clear_history(
+    session_id:str,
+    request_id:str,
+    correlation_id:str
+):
     """Removes the chat history for a given session ID from MongoDB."""
+
+    log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [SID:{session_id[:8]}]"
+
     try:
         await run_in_threadpool(MONGO_CHAT_CLIENT.clear_history, session_id)
+        logger.info(f"{log_prefix} History cleared successfully.")
     except Exception as e:
-        logger.error(f"Failed to clear history for {session_id[:8]}...: {e}")
+        logger.error(f"{log_prefix} Failed to clear history for {session_id[:8]}...: {e}")
         raise HTTPException(
             status_code=500,
             detail={"error": "DATABASE_ERROR", "message": f"Failed to clear chat history from database: {e}"}

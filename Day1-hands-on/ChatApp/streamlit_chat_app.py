@@ -14,6 +14,7 @@ class FetchHistoryError(Exception):
 POST_URL = "http://localhost:8000/chat/prompt" # For sending prompt
 GET_URL = "http://localhost:8000/chat/history" # For fetching history
 CLEAR_URL = "http://localhost:8000/chat/history/clear" # New URL for clearing history
+HISTORY_LIMIT =6 # Number of messages to fetch per pagination request
 
 # --- 1. Initialization ---
 
@@ -34,6 +35,14 @@ if 'history_error' not in st.session_state:
 # Messages now hold the full HistoryMessage dictionary structure.
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if 'history_offset' not in st.session_state:
+    st.session_state.history_offset = 0 # Offset for next oldest messages
+if 'has_more_history' not in st.session_state:
+    st.session_state.has_more_history = True
+if 'initial_load_complete' not in st.session_state:
+    st.session_state.initial_load_complete = False
+if 'correlation_id' not in st.session_state:
+    st.session_state.correlation_id = str(uuid.uuid4())
 
 def run_async_task(task_func, *args):
     """Synchronous wrapper for running async functions."""
@@ -65,14 +74,21 @@ async def async_clear_history():
     """Sends a DELETE request to clear the history for the current session."""
     final_clear_url = f"{CLEAR_URL}?session_id={SESSION_ID}"
 
+    headers = {
+        "X-Correlation-ID": st.session_state.correlation_id
+    }
+
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             st.toast("Clearing chat history...", icon="🗑️")
-            response = await client.delete(final_clear_url)
+            response = await client.delete(final_clear_url, headers=headers)
             response.raise_for_status()
 
             # On success (204 No Content), clear local state immediately
             st.session_state.messages = []
+            st.session_state.history_offset = 0
+            st.session_state.has_more_history = True # Reset pagination
+            st.session_state.initial_load_complete = False
             st.toast("Chat history cleared!", icon="✅")
     
     except httpx.HTTPStatusError as e:
@@ -111,7 +127,10 @@ with col2:
 
 async def async_get_ai_response_from_backend(user_prompt: str) -> str:
     """Sends prompt via POST and expects only the inference response text."""
-    headers = {"session-id": SESSION_ID}
+    headers = {
+        "session-id": SESSION_ID,
+        "X-Correlation-ID": st.session_state.correlation_id
+    }
     payload = {"prompt": user_prompt}
 
     try: 
@@ -135,21 +154,55 @@ async def async_get_ai_response_from_backend(user_prompt: str) -> str:
         # Handle any other unexpected Python exceptions
         return f"An unexpected client-side error occurred: {e}"
 
-async def async_fetch_history() -> List[Dict[str,Any]]:
+async def async_fetch_history(limit:int, offset:int, append:bool) -> List[Dict[str,Any]]:
     """Fetches the full history (HistoryMessage structure) from the backend GET endpoint."""
-    final_get_url = f"{GET_URL}?session_id={SESSION_ID}"
+    # Generate new IDs for the GET request (separate request lifecycle)
+    current_request_id = str(uuid.uuid4())
+    # Reuse correlation ID
+    correlation_id = st.session_state.correlation_id
+
+    final_get_url = f"{GET_URL}?session_id={SESSION_ID}&limit={limit}&offset={offset}&X-Request-ID={current_request_id}&X-Correlation-ID={correlation_id}"
 
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.get(final_get_url)
             response.raise_for_status()
             
-            history = response.json().get("history", [])
-            if isinstance(history, list):
-                return history
-            else:
-                # Backend success response has invalid payload structure
+            history_response = response.json().get("history", [])
+            if not isinstance(history_response, list):
                 raise FetchHistoryError("Backend returned history in an invalid format.")
+            
+            is_end_of_history = len(history_response) < limit
+            if is_end_of_history:
+                st.session_state.has_more_history = False
+            
+            if append:
+                # Deduplication: Use a composite key (role + content) to prevent duplicates due to offset errors.
+                
+                # 1. Create a set of keys for all currently displayed messages
+                existing_keys = set((m.get('role', 'unknown'), m.get('content', '')) for m in st.session_state.messages)
+                
+                # 2. Filter the newly fetched history (older messages) to keep only unique ones
+                unique_new_messages = []
+                for msg in history_response:
+                    key = (msg.get('role', 'unknown'), msg.get('content', ''))
+                    if key not in existing_keys:
+                        unique_new_messages.append(msg)
+                        
+                # 3. Prepend only unique older messages
+                st.session_state.messages = unique_new_messages + st.session_state.messages
+                
+                # 4. Update offset based on how many unique messages were actually added
+                st.session_state.history_offset += len(unique_new_messages)
+                
+            else:
+                # Initial load or new messages overwrite the state
+                st.session_state.messages = history_response
+                st.session_state.history_offset = len(history_response)
+            
+            return st.session_state.messages
+            # --- END PAGINATION LOGIC REFINED ---
+                
 
     except httpx.HTTPStatusError as e:
         # Catch HTTP Status Errors (4xx, 5xx) raised by raise_for_status
@@ -164,28 +217,57 @@ async def async_fetch_history() -> List[Dict[str,Any]]:
         # Handle any other unexpected Python exceptions
         raise FetchHistoryError(f"An unexpected client-side error occurred while fetching history: {e}")   
 
-
 # --- 4. History Refresh Logic (Run on every rerun) ---
-if not st.session_state.is_processing:
-    history_result = run_async_task(async_fetch_history)
-    if isinstance(history_result, list):
-        st.session_state.messages = history_result
-    elif len(st.session_state.messages) == 0:
-        st.error(history_result)
+# Container for all chat messages to enable scroll detection
+# chat_container = st.container(height=500, border=True)
+
+def initial_history_load():
+    if st.session_state.is_processing or st.session_state.initial_load_complete:
+        return
+    try:
+        run_async_task(async_fetch_history, HISTORY_LIMIT, 0, False)
+        st.session_state.initial_load_complete = True
+    except FetchHistoryError as e:
+        st.session_state.history_error = str(e)
+        st.error(st.session_state.history_error)
+
+initial_history_load()
 
 # Display history error if present
 if st.session_state.history_error:
     st.error(st.session_state.history_error)
 
-# --- 5. History Display Loop ---
+# Displays the current history fetched
+# We display messages in their fetched order (oldest to newest)
+if st.session_state.has_more_history and st.session_state.initial_load_complete and len(st.session_state.messages) > 0:
+    if st.button("Load More History", use_container_width=True, disabled=st.session_state.is_processing):
+        st.session_state.is_processing = True
+        st.session_state.history_error = None # Clear previous error
+        
+        # Fetch older history (append=True) using the current offset
+        try:
+            run_async_task(async_fetch_history, HISTORY_LIMIT, st.session_state.history_offset, True)
+        except FetchHistoryError as e:
+            st.session_state.history_error = str(e)
+        
+        st.session_state.is_processing = False
+        st.rerun()
+# Display status messages when history is fully loaded or empty
+elif st.session_state.initial_load_complete and not st.session_state.has_more_history:
+    # Check if there are any messages to display "fully loaded" or "start chatting"
+    if len(st.session_state.messages) > 0:
+        st.caption("--- History fully loaded ---")
+    else:
+        st.caption("--- Start chatting to begin your history ---")
+
 # Displays the current history fetched
 for message in st.session_state.messages:
     # 💡 IMPORTANT: Extracting 'role' and 'content' from the full HistoryMessage dict
     role = message.get('role', 'unknown')
     content = message.get('content', 'Error: Message content missing.')
-    avatar = "👤" if message['role'] == "user" else "🤖"
-    with st.chat_message(message["role"], avatar=avatar):
-        st.markdown(message["content"])
+    avatar = "👤" if role == "user" else "🤖"
+    with st.chat_message(role, avatar=avatar):
+        st.markdown(content)
 
 # --- 5. Handle New Input (In-Memory Logic + Backend Call) ---
 
@@ -194,6 +276,8 @@ if prompt := st.chat_input("Ask Hugg something...", disabled=st.session_state.is
     # 1. Start Processing: Set state to True and trigger a rerun to disable the input field
     st.session_state._temp_prompt = prompt
     st.session_state.is_processing = True
+    st.session_state.correlation_id = str(uuid.uuid4())
+
     st.rerun()
 
 # 6. Process the Response (This runs on the subsequent rerun)
@@ -208,7 +292,7 @@ if st.session_state.is_processing and st.session_state._temp_prompt:
     with st.spinner("Hugg is thinking..."):
         # context_messages = st.session_state.messages
         backend_response = run_async_task(async_get_ai_response_from_backend, user_prompt_to_send)
-    
+
     with st.chat_message("assistant", avatar="🤖"):
         if backend_response.startswith(("Connection Error:", "Server Error:")):
             st.error(backend_response)
@@ -216,6 +300,10 @@ if st.session_state.is_processing and st.session_state._temp_prompt:
             st.markdown(backend_response)
 
     # 6. Unlock the input and trigger final rerun
+    st.session_state.history_offset = 0
+    st.session_state.has_more_history = True 
+    st.session_state.initial_load_complete = False 
+
     st.session_state._temp_prompt = None # Clear temporary storage
     st.session_state.is_processing = False
     st.rerun()

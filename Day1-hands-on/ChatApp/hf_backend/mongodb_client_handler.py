@@ -35,16 +35,30 @@ class MongoChatClient:
             del message_dict['_id']
         return HistoryMessage(**message_dict)
 
-    def get_history(self, chat_id:str) -> List[HistoryMessage]:
+    def get_history(self, chat_id:str, limit:int = 10, offset:int = 0) -> List[HistoryMessage]:
         """Retrieves the full message history for a given chat ID."""
         if self.collection is None:
             return []
 
         try:
-            document = self.collection.find_one({'chat_id': chat_id})
-            logger.info(document)
+            # Calculate the starting and ending index for the slice.
+            # MongoDB's $slice: [skip_from_end, limit]
+            # To fetch messages starting from the Nth message from the end, skipping 'offset',
+            # we use skip_from_end = -(offset + limit)
+            
+            # The slice fetches the messages in reverse order (newest first).
+            slice_start = -(offset + limit)
+            slice_end = limit
+            
+            # Use projection to retrieve only the sliced 'messages' array
+            document = self.collection.find_one(
+                {'chat_id': chat_id},
+                {'messages': {'$slice': [slice_start, slice_end]}}
+            )
+
             if not document or 'messages' not in document:
                 return []
+                
             history = [self._message_from_mongo(msg) for msg in document['messages']]
             # logger.info(f"History till now -----: {history}")
             return history
