@@ -245,8 +245,8 @@ async def update_chat_title(
     try:
         await run_in_threadpool(
             MONGO_CHAT_CLIENT.update_chat_title,
-            user_id,
             chat_id,
+            user_id,
             title
         )
         logger.info(f"{log_prefix} Chat session title updated to: {title}")

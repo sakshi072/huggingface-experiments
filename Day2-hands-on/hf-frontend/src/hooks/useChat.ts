@@ -7,6 +7,24 @@ import type { ChatSessionMetadata } from "../api/auth-service";
 
 const PAGE_SIZE = 10;
 
+const generateTitleFromMessage = (message: string): string => {
+    
+    // remove extra space
+    const cleaned = message.trim().replace(/\s+/g, ' ');
+    if (cleaned.length <= 50){
+        return cleaned
+    }
+
+    const truncated = cleaned.substring(0,47);
+    const lastSpace = truncated.lastIndexOf(' ');
+
+    if (lastSpace > 30) {
+        return truncated.substring(0, lastSpace) + '...';
+    }
+
+    return truncated + '...';
+}
+
 export const useChat = () => {
     const { user, isLoaded } = useUser();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -20,6 +38,8 @@ export const useChat = () => {
     
     const messagesLoadedFromHistoryRef = useRef(0);
     const messagesSentInSessionRef = useRef(0);
+
+    const chatTitleRef = useRef<Set<string>>(new Set());
 
     // Load user's chat sessions when authenticated
     useEffect(() => {
@@ -221,6 +241,21 @@ export const useChat = () => {
                 setHasMore(true);
             }
 
+            const shouldAutoTitle = !chatTitleRef.current.has(currentChatId);
+            if(shouldAutoTitle){
+                const currentChat = chatSessions.find(s => s.chat_id === currentChatId);
+                if (currentChat && currentChat.title === 'New Chat' && currentChat.message_count===0){
+                    const autoTitle = generateTitleFromMessage(prompt)
+                    try {
+                        await authChatService.updateChatSession(user.id, currentChatId, autoTitle);
+                        chatTitleRef.current.add(currentChatId);
+                        console.log(`Auto-titled chat: "${autoTitle}"`);
+                    } catch (error) {
+                        console.error("Failed to auto-title chat:", error);
+                    }
+                }
+            }
+
             // Refresh chat sessions to update timestamps/counts
             loadChatSessions();
         } catch (error) {
@@ -282,6 +317,18 @@ export const useChat = () => {
         }
     };
 
+    const updateChatTitle = async (chatId:string, newTitle:string) => {
+        if(!user?.id) return;
+
+        try {
+            await authChatService.updateChatSession(user.id, chatId, newTitle);
+            chatTitleRef.current.add(chatId);
+            await loadChatSessions();
+        } catch (error) {
+            console.error("Failed to update chat title", error);
+        }
+    };
+
     const loadPreviousMessages = useCallback(() => {
         loadHistorySegment();
     }, [loadHistorySegment]);
@@ -298,6 +345,7 @@ export const useChat = () => {
         startNewChat,
         switchToChat,
         deleteChat,
+        updateChatTitle,
         isAuthenticated: isLoaded && !!user,
     };
 };

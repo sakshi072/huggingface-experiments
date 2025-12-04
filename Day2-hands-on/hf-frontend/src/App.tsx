@@ -30,6 +30,7 @@ const AuthenticatedApp: React.FC = () => {
         onNewChat={chatLogic.startNewChat}
         onSelectChat={chatLogic.switchToChat}
         onDeleteChat={chatLogic.deleteChat}
+        onUpdateTitle={chatLogic.updateChatTitle}
       />
       
       <div className="flex-grow lg:ml-80"> 
