@@ -4,26 +4,9 @@ import type { ChatMessage, HistoryMessage } from "../types/chat-types";
 import { chatService } from "../api/chat-service";
 import { authChatService } from "../api/auth-service";
 import type { ChatSessionMetadata } from "../api/auth-service";
+import { smartTitleService } from "../api/smart-title-service";
 
 const PAGE_SIZE = 10;
-
-const generateTitleFromMessage = (message: string): string => {
-    
-    // remove extra space
-    const cleaned = message.trim().replace(/\s+/g, ' ');
-    if (cleaned.length <= 50){
-        return cleaned
-    }
-
-    const truncated = cleaned.substring(0,47);
-    const lastSpace = truncated.lastIndexOf(' ');
-
-    if (lastSpace > 30) {
-        return truncated.substring(0, lastSpace) + '...';
-    }
-
-    return truncated + '...';
-}
 
 export const useChat = () => {
     const { user, isLoaded } = useUser();
@@ -245,14 +228,27 @@ export const useChat = () => {
             if(shouldAutoTitle){
                 const currentChat = chatSessions.find(s => s.chat_id === currentChatId);
                 if (currentChat && currentChat.title === 'New Chat' && currentChat.message_count===0){
-                    const autoTitle = generateTitleFromMessage(prompt)
-                    try {
-                        await authChatService.updateChatSession(user.id, currentChatId, autoTitle);
-                        chatTitleRef.current.add(currentChatId);
-                        console.log(`Auto-titled chat: "${autoTitle}"`);
-                    } catch (error) {
-                        console.error("Failed to auto-title chat:", error);
-                    }
+                    smartTitleService.generateTitle(user.id, prompt, response.response)
+                        .then(async (titleResult) => {
+                            try {
+                                await authChatService.updateChatSession(user.id, currentChatId, titleResult.title);
+                                chatTitleRef.current.add(currentChatId);
+
+                                if (titleResult.fallback) {
+                                    console.log(`Used fallback title: "${titleResult.title}"`);
+                                } else {
+                                    console.log(`AI-generated title: "${titleResult.title}"`);
+                                }
+                                
+                                // Refresh sessions to show new title
+                                loadChatSessions();
+                            } catch (error) {
+                                console.error("Failed to save AI-generated title:", error);
+                            }
+                        })
+                        .catch((error) => {
+                            console.error("Failed to generate AI title:", error);
+                        });
                 }
             }
 

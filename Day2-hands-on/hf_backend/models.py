@@ -53,3 +53,13 @@ class ChatSessionsResponse(BaseModel):  # Fixed typo: was "ChatSessionsReposne"
 class UpdateTitleRequest(BaseModel):
     """Request to update chat title."""
     title: str
+
+class GenerateTitleRequest(BaseModel):
+    """Request to generate a smart title using AI."""
+    first_message: str
+    assistant_response: Optional[str] = None
+
+class GenerateTitleResponse(BaseModel):
+    """Response containing the generated title."""
+    title: str
+    fallback: bool = False 

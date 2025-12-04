@@ -123,6 +123,118 @@ async def generate_response(
             detail={"error": "LLM_INFERENCE_FAILED", "message": detail_msg}
         )
 
+async def generate_smart_title(
+    user_id:str,
+    first_message:str,
+    assistant_response:str = None,
+    request_id:str = None, 
+    correlation_id:str = None
+) -> str:
+    """
+    Uses the LLM to generate a concise, meaningful title for a chat.
+    
+    Args:
+        user_id: The user's ID (for logging)
+        first_message: The first user message
+        assistant_response: Optional assistant response for more context
+        request_id: Request tracking ID
+        correlation_id: Correlation tracking ID
+    
+    Returns:
+        A concise title (max 50 characters)
+    """
+    log_prefix = f"[RID:{request_id[:8] if request_id else 'N/A'}] [CID:{correlation_id[:8] if correlation_id else 'N/A'}] [UID:{user_id[:8]}]"
+    
+    try: 
+        if assistant_response:
+            title_prompt = (
+                f"Based on this conversation, generate a short, concise title (maximum 50 characters):\n\n"
+                f"User: {first_message}\n"
+                f"Assistant: {assistant_response}\n\n"
+                f"Generate ONLY the title, nothing else. Keep it under 50 characters."
+            )
+        else:
+            title_prompt = (
+                f"Generate a short, concise title (maximum 50 characters) for a conversation starting with:\n\n"
+                f"\"{first_message}\"\n\n"
+                f"Generate ONLY the title, nothing else. Keep it under 50 characters."
+            )
+        
+        title_context = [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant that generates concise, descriptive titles for conversations. Respond with ONLY the title, no explanations or extra text."
+            },
+            {
+                "role": "user",
+                "content": title_prompt
+            }
+        ]
+
+        # Call LLM with reduced max tokens for faster response
+        logger.debug(f"{log_prefix} Generating AI title...")
+
+        if HF_CLIENT is None:
+            raise ConnectionError("Hugging Face client is not initialized.")
+
+        completion = await run_in_threadpool(
+            lambda: HF_CLIENT.chat.completions.create(
+                model=MODEL_ID,
+                messages=title_context,
+                max_tokens=30,
+                temperature=0.7,
+                stream=False
+            )
+        )
+
+        generated_title = completion.choices[0].message.content.strip()
+
+        # Clean up the title
+        # Remove quotes if present
+        generated_title = generated_title.strip('"\'')
+
+        prefixes_to_remove = ["Title:", "Chat:", "Conversation:"]
+        for prefix in prefixes_to_remove:
+            if generated_title.startswith(prefix):
+                generated_title = generated_title[len(prefix):].strip()
+
+        # Ensure it's not too long
+        if len(generated_title) > 50:
+            generated_title = generated_title[:47] + "..."
+        
+        # Fallback if title is empty or too short
+        if len(generated_title) < 3:
+            logger.warning(f"{log_prefix} Generated title too short, using fallback")
+            generated_title = generate_fallback_title(first_message)
+        
+        logger.info(f"{log_prefix} Generated AI title: '{generated_title}'")
+        return generated_title
+        
+    except Exception as e:
+        logger.error(f"{log_prefix} Failed to generate AI title: {e}", exc_info=True)
+        # Return fallback title on error
+        return generate_fallback_title(first_message)
+
+def generate_fallback_title(message:str) -> str:
+    """
+    Generate a fallback title by truncating the message intelligently.
+    Used when AI title generation fails.
+    """
+    cleaned = message.strip().replace('\n', ' ').replace('\r', '')
+    cleaned = ' '.join(cleaned.split())  # Normalize whitespace
+    
+    if len(cleaned) <= 50:
+        return cleaned
+    
+    # Truncate at word boundary
+    truncated = cleaned[:47]
+    last_space = truncated.rfind(' ')
+    
+    if last_space > 30:
+        return truncated[:last_space] + '...'
+    
+    return truncated + '...'
+
 # --- Chat Session Management Functions ---
 
 async def create_chat_session(

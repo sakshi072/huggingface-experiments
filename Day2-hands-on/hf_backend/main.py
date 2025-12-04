@@ -5,7 +5,7 @@ from . import service
 from .models import (
     ChatPrompt, InferenceResponse, HistoryResponse, 
     CreateChatRequest, CreateChatResponse, ChatSessionsResponse,  # Fixed typo
-    UpdateTitleRequest
+    UpdateTitleRequest, GenerateTitleRequest, GenerateTitleResponse
 )
 from .config import logger
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +34,44 @@ def validate_user_id(user_id: Optional[str]) -> str:
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing 'user-id' header. Authentication required.")
     return user_id
+
+
+# --- Smart Title Generation Endpoint ---
+
+@app.post("/chat/generate-title", response_model=GenerateTitleResponse)
+async def generate_chat_title(
+    request: GenerateTitleRequest,
+    user_id: Optional[str] = Header(None, alias="user-id"),
+    x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
+    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID")
+):
+    """
+    Generates a smart, AI-powered title for a chat conversation.
+    Uses the LLM to create concise, meaningful titles.
+    """
+    user_id = validate_user_id(user_id)
+    x_request_id = x_request_id or str(uuid.uuid4())
+    x_correlation_id = x_correlation_id or str(uuid.uuid4())
+
+    log_prefix = f"[RID:{x_request_id[:8]}] [CID:{x_correlation_id[:8]}]"
+    logger.info(f"{log_prefix} Generating smart title for user {user_id[:8]}...")
+
+    try:
+        title = await service.generate_smart_title(
+            user_id=user_id,
+            first_message=request.first_message,
+            assistant_response=request.assistant_response,
+            request_id=x_request_id,
+            correlation_id=x_correlation_id
+        )
+
+        return GenerateTitleResponse(title=title, fallback=False)
+    
+    except Exception as e:
+        logger.error(f"{log_prefix} Title generation failed, using fallback: {e}")
+        # Return fallback title
+        fallback_title = service.generate_fallback_title(request.first_message)
+        return GenerateTitleResponse(title=fallback_title, fallback=True)
 
 # --- Chat Session Management Endpoints ---
 
