@@ -71,14 +71,13 @@ export const useChat = () => {
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
             
-            // setChatSessions(sortedSessions);
+            setChatSessions(sortedSessions);
 
             // Auto-select or create first chat
             if (sortedSessions.length > 0) {
                 // User has existing chats - select the most recent one
                 setCurrentChatId(sortedSessions[0].chat_id);
-                setChatSessions(sortedSessions);
-
+                
                 sortedSessions.forEach(session => {
                     if(session.title !=='New Chat'){
                         markChatAsTitled(session.chat_id);

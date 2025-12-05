@@ -14,7 +14,11 @@ export const Sidebar: React.FC = () => {
     const formatDate = (dateString:string) => {
         const date = new Date(dateString);
         const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
+
+        const nowDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const dateDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+        const diffMs = nowDay.getTime() - dateDay.getTime();
         const diffDays = Math.floor(diffMs/(1000 * 60 * 60 * 24));
 
         if(diffDays === 0) return 'Today';
