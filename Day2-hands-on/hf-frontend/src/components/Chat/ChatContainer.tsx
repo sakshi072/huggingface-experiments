@@ -1,25 +1,14 @@
 import React, { useEffect, useRef, useCallback } from 'react';
-import type { ChatMessage } from '../../types/chat-types';
 import { Message } from './Message';
 import { PromptInput } from './PromptInput';
+import { useChatStore } from '../../stores';
+import { useChat } from '../../hooks/useChat';
 
-interface ChatContainerProps {
-  messages: ChatMessage[];
-  isLoading: boolean;
-  isPaginating?: boolean;
-  hasMore?: boolean;
-  loadPreviousMessages?: () => void;
-  sendMessage: (prompt: string) => Promise<void>;
-}
+export const ChatContainer: React.FC= () => {
 
-export const ChatContainer: React.FC<ChatContainerProps> = ({
-  messages,
-  isLoading,
-  isPaginating = false,
-  hasMore = false,
-  loadPreviousMessages,
-  sendMessage
-}) => {
+  const { messages, isLoading, isPaginating, hasMore } = useChatStore();
+  const {loadPreviousMessages, sendMessage} = useChat()
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const previousScrollHeightRef = useRef<number>(0);

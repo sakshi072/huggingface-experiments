@@ -79,11 +79,11 @@ export const useChat = () => {
                 setCurrentChatId(sortedSessions[0].chat_id);
                 setChatSessions(sortedSessions);
 
-                // sortedSessions.forEach(session => {
-                //     if(session.title !=='New Chat'){
-                //         markChatAsTitled(session.chat_id);
-                //     }
-                // });
+                sortedSessions.forEach(session => {
+                    if(session.title !=='New Chat'){
+                        markChatAsTitled(session.chat_id);
+                    }
+                });
             } else {
                 // New user - create their first chat automatically
                 console.log("New user detected - creating first chat...");
@@ -100,6 +100,8 @@ export const useChat = () => {
             try {
                 const newChat = await authChatService.createChatSession(user.id, "New Chat");
                 setCurrentChatId(newChat.chat_id);
+
+                await loadChatSessions();
             } catch (createError) {
                 console.error("Failed to create fallback chat:", createError);
             }
@@ -336,14 +338,8 @@ export const useChat = () => {
     }, [loadHistorySegment]);
 
     return {
-        messages,
-        isLoading,
-        isPaginating,
-        hasMore,
         sendMessage,
         loadPreviousMessages,
-        currentChatId,
-        chatSessions,
         startNewChat,
         switchToChat,
         deleteChat,

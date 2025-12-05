@@ -1,24 +1,13 @@
 import React, {useState} from "react";
-import type { ChatSessionMetadata } from "../../api/auth-service";
 import { ConfirmationModal } from "../Modals/ConfirmationModal";
 import { EditTitleModal } from "../Modals/EditTitleModal";
-interface SidebarProps {
-    chatSessions: ChatSessionMetadata[];
-    currentChatId: string | null;
-    onNewChat: () => void;
-    onSelectChat: (chatId: string) => void;
-    onDeleteChat: (chatId:string) => void;
-    onUpdateTitle: (chatId:string, newTitle:string) => void;
-}
+import { useChatStore } from "../../stores";
+import { useChat } from "../../hooks/useChat";
 
-export const Sidebar: React.FC<SidebarProps> = ({
-    chatSessions, 
-    currentChatId,
-    onNewChat,
-    onSelectChat,
-    onDeleteChat,
-    onUpdateTitle
-}) => {
+export const Sidebar: React.FC = () => {
+    const { chatSessions, currentChatId } = useChatStore();
+    const { startNewChat, switchToChat, deleteChat, updateChatTitle } = useChat();
+
     const [chatToDelete, setChatToDelete] = useState<{ id:string; title:string } | null>(null);
     const [chatToEdit, setChatToEdit] = useState<{ id:string; title:string } | null>(null);
     
@@ -46,14 +35,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     const handleConfirmDelete = () => {
         if(chatToDelete){
-            onDeleteChat(chatToDelete.id)
+            deleteChat(chatToDelete.id)
             setChatToDelete(null);
         }
     };
 
     const handleSaveTitle = (newTitle:string) => {
         if(chatToEdit){
-            onUpdateTitle(chatToEdit.id, newTitle);
+            updateChatTitle(chatToEdit.id, newTitle);
             setChatToEdit(null);
         }
     }
@@ -64,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <h2 className="text-xl font-bold mb-6">🤗 HUGG Chat</h2>
             
             <button 
-                onClick={onNewChat} 
+                onClick={startNewChat} 
                 className="w-full py-2 px-4 mb-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
             >
                 <span>➕</span>
@@ -82,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {chatSessions.map((session) => (
                     <div
                         key={session.chat_id}
-                        onClick={() => onSelectChat(session.chat_id)}
+                        onClick={() => switchToChat(session.chat_id)}
                         className={`p-3 rounded-lg cursor-pointer transition-colors group ${
                         currentChatId === session.chat_id
                             ? 'bg-gray-700 border border-gray-600'

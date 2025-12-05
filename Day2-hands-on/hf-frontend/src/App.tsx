@@ -24,14 +24,7 @@ const AuthenticatedApp: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-white">
-      <Sidebar 
-        chatSessions={chatLogic.chatSessions}
-        currentChatId={chatLogic.currentChatId}
-        onNewChat={chatLogic.startNewChat}
-        onSelectChat={chatLogic.switchToChat}
-        onDeleteChat={chatLogic.deleteChat}
-        onUpdateTitle={chatLogic.updateChatTitle}
-      />
+      <Sidebar />
       
       <div className="flex-grow lg:ml-80"> 
         {/* User button in top right */}
@@ -42,14 +35,7 @@ const AuthenticatedApp: React.FC = () => {
           <UserButton afterSignOutUrl="/" />
         </div>
         
-        <ChatContainer 
-          messages={chatLogic.messages}
-          isLoading={chatLogic.isLoading}
-          isPaginating={chatLogic.isPaginating}
-          hasMore={chatLogic.hasMore}
-          loadPreviousMessages={chatLogic.loadPreviousMessages}
-          sendMessage={chatLogic.sendMessage}
-        />
+        <ChatContainer  />
       </div>
     </div>
   );
