@@ -77,6 +77,7 @@ export const useChat = () => {
             if (sortedSessions.length > 0) {
                 // User has existing chats - select the most recent one
                 setCurrentChatId(sortedSessions[0].chat_id);
+                setChatSessions(sortedSessions);
 
                 // sortedSessions.forEach(session => {
                 //     if(session.title !=='New Chat'){
