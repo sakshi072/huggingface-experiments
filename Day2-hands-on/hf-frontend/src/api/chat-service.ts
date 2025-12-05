@@ -45,7 +45,7 @@ export const chatService = {
             }
         });
         
-        return response.data.history.reverse();
+        return response.data.history;
     },
 
     /**

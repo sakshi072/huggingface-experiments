@@ -1,50 +1,88 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback } from "react";
 import { useUser } from "@clerk/clerk-react";
-import type { ChatMessage, HistoryMessage } from "../types/chat-types";
+import type { HistoryMessage } from "../types/chat-types";
 import { chatService } from "../api/chat-service";
 import { authChatService } from "../api/auth-service";
-import type { ChatSessionMetadata } from "../api/auth-service";
 import { smartTitleService } from "../api/smart-title-service";
+import { useChatStore } from "../stores/chatStore";
+import { useAuthStore } from "../stores/authStore";
 
 const PAGE_SIZE = 10;
 
 export const useChat = () => {
     const { user, isLoaded } = useUser();
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-    const [chatSessions, setChatSessions] = useState<ChatSessionMetadata[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
-    const [isPaginating, setIsPaginating] = useState(false);
-    const [hasMore, setHasMore] = useState(false);
-    const isLoadingMoreRef = useRef(false);
-    const hasInitializedRef = useRef(false); // Prevent double initialization
+    const {
+        messages,
+        currentChatId,
+        chatSessions,
+        isLoading,
+        isPaginating,
+        hasMore,
+        messagesLoadedFromHistory,
+        messagesSentInSession,
+        setMessages,
+        addMessage,
+        updateLastMessage,
+        setCurrentChatId,
+        setChatSessions,
+        setIsLoading,
+        setIsPaginating,
+        setHasMore,
+        incrementMessagesLoaded,
+        incrementMessagesSent,
+        resetPaginationTracking,
+        markChatAsTitled,
+        isChatTitled,
+        unmarkChatAsTitled,
+        resetMessages
+    } = useChatStore();
     
-    const messagesLoadedFromHistoryRef = useRef(0);
-    const messagesSentInSessionRef = useRef(0);
-
-    const chatTitleRef = useRef<Set<string>>(new Set());
+    const {
+        hasInitialized,
+        setUserId,
+        setIsAuthenticated,
+        setIsLoaded,
+        setHasInitialized
+    } = useAuthStore();
 
     // Load user's chat sessions when authenticated
     useEffect(() => {
-        if (isLoaded && user?.id && !hasInitializedRef.current) {
-            hasInitializedRef.current = true;
+        setIsLoaded(isLoaded);
+        setIsAuthenticated(isLoaded && !!user);
+        if(user?.id){
+            setUserId(user.id);
+        }
+    }, [isLoaded, user, setIsLoaded, setIsAuthenticated, setUserId]);
+
+    // Initialize chats when authenticated
+    useEffect(() => {
+        if (isLoaded && user?.id && !hasInitialized) {
+            setHasInitialized(true);
             initializeChats();
         }
-    }, [isLoaded, user?.id]);
+    }, [isLoaded, user?.id, hasInitialized, setHasInitialized]);
 
     const initializeChats = async () => {
         if (!user?.id) return;
         
         try {
             const sessions = await authChatService.getChatSession(user.id);
-            setChatSessions(sessions.sort((a, b) => 
+            const sortedSessions = sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-            ));
+            );
             
+            // setChatSessions(sortedSessions);
+
             // Auto-select or create first chat
-            if (sessions.length > 0) {
+            if (sortedSessions.length > 0) {
                 // User has existing chats - select the most recent one
-                setCurrentChatId(sessions[0].chat_id);
+                setCurrentChatId(sortedSessions[0].chat_id);
+
+                // sortedSessions.forEach(session => {
+                //     if(session.title !=='New Chat'){
+                //         markChatAsTitled(session.chat_id);
+                //     }
+                // });
             } else {
                 // New user - create their first chat automatically
                 console.log("New user detected - creating first chat...");
@@ -82,13 +120,12 @@ export const useChat = () => {
 
     const loadHistorySegment = useCallback(async () => {
         if (!user?.id || !currentChatId) return;
-        if (isPaginating || isLoading || isLoadingMoreRef.current || !hasMore) return;
+        if (isPaginating || isLoading || !hasMore) return;
 
-        isLoadingMoreRef.current = true;
         setIsPaginating(true);
 
         try {
-            const offset = messagesLoadedFromHistoryRef.current + messagesSentInSessionRef.current;
+            const offset = messagesLoadedFromHistory + messagesSentInSession;
             
             const history: HistoryMessage[] = await chatService.getHistory(
                 user.id,
@@ -102,23 +139,22 @@ export const useChat = () => {
                 return;
             }
 
-            const clientMessages: ChatMessage[] = history.map(msg => ({
+            const clientMessages = history.map(msg => ({
                 ...msg,
-                status: 'sent',
+                status: 'sent' as const,
             }));
 
-            setMessages(prev => {
-                const existingTimestamps = new Set(prev.map(m => m.timestamp));
-                const newUniqueMessages = clientMessages.filter(m => !existingTimestamps.has(m.timestamp));
+            const existingTimestamps = new Set(messages.map(m => m.timestamp));
+            const newUniqueMessages = clientMessages.filter(m => !existingTimestamps.has(m.timestamp));
+
+            if (newUniqueMessages.length === 0){
+                setHasMore(false);
+                return;
+            }
+
+            incrementMessagesLoaded(newUniqueMessages.length);
+            setMessages([...newUniqueMessages, ...messages]);
                 
-                if (newUniqueMessages.length === 0) {
-                    setHasMore(false);
-                    return prev;
-                }
-                
-                messagesLoadedFromHistoryRef.current += newUniqueMessages.length;
-                return [...newUniqueMessages, ...prev];
-            });
 
             if (history.length < PAGE_SIZE) {
                 setHasMore(false);
@@ -127,9 +163,6 @@ export const useChat = () => {
             console.error("Failed to load history:", error);
         } finally {
             setIsPaginating(false);
-            setTimeout(() => {
-                isLoadingMoreRef.current = false;
-            }, 500);
         }
     }, [user?.id, currentChatId, hasMore, isLoading, isPaginating]);
 
@@ -137,10 +170,7 @@ export const useChat = () => {
     useEffect(() => {
         if (!user?.id || !currentChatId) return;
 
-        setMessages([]);
-        setHasMore(false);
-        messagesLoadedFromHistoryRef.current = 0;
-        messagesSentInSessionRef.current = 0;
+        resetMessages();
         
         const loadInitial = async () => {
             setIsLoading(true);
@@ -154,13 +184,13 @@ export const useChat = () => {
 
                 if (history.length === 0) return;
 
-                const clientMessages: ChatMessage[] = history.map(msg => ({
+                const clientMessages = history.map(msg => ({
                     ...msg,
-                    status: 'sent',
+                    status: 'sent' as const,
                 }));
 
                 setMessages(clientMessages);
-                messagesLoadedFromHistoryRef.current = clientMessages.length;
+                incrementMessagesLoaded(clientMessages.length);
 
                 if (history.length >= PAGE_SIZE) {
                     setHasMore(true);
@@ -180,51 +210,37 @@ export const useChat = () => {
 
         setIsLoading(true);
 
-        const newUserMessage: ChatMessage = {
+        const newUserMessage = {
             session_id: currentChatId,
-            role: 'user',
+            role: 'user' as const,
             content: prompt,
             timestamp: new Date().toISOString(),
-            status: 'sent',
+            status: 'sent' as const,
         };
 
-        const loadingAssistantMessage: ChatMessage = {
+        const loadingAssistantMessage = {
             session_id: currentChatId,
-            role: 'assistant',
-            content: 'Thinking...',
+            role: 'assistant' as const,
+            content: 'Thinking...' as const,
             timestamp: new Date().toISOString(),
-            status: 'loading',
+            status: 'loading' as const,
         };
 
-        setMessages(prev => [...prev, newUserMessage, loadingAssistantMessage]);
+        addMessage(newUserMessage);
+        addMessage(loadingAssistantMessage)
 
         try {
             const response = await chatService.getInference(user.id, currentChatId, prompt);
 
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessageIndex = newMessages.length - 1;
-
-                if (lastMessageIndex >= 0 && newMessages[lastMessageIndex].status === 'loading') {
-                    newMessages[lastMessageIndex] = {
-                        ...newMessages[lastMessageIndex],
-                        content: response.response,
-                        status: 'sent',
-                        timestamp: new Date().toISOString(),
-                    };
-                }
-                
-                return newMessages;
-            });
-
-            messagesSentInSessionRef.current += 2;
+            updateLastMessage(response.response, 'sent');
+            incrementMessagesSent(2);
             
-            const totalMessages = messagesLoadedFromHistoryRef.current + messagesSentInSessionRef.current;
+            const totalMessages = messagesLoadedFromHistory + messagesSentInSession + 2;
             if (totalMessages > PAGE_SIZE && !hasMore) {
                 setHasMore(true);
             }
 
-            const shouldAutoTitle = !chatTitleRef.current.has(currentChatId);
+            const shouldAutoTitle = !isChatTitled(currentChatId);
             if(shouldAutoTitle){
                 const currentChat = chatSessions.find(s => s.chat_id === currentChatId);
                 if (currentChat && currentChat.title === 'New Chat' && currentChat.message_count===0){
@@ -232,13 +248,12 @@ export const useChat = () => {
                         .then(async (titleResult) => {
                             try {
                                 await authChatService.updateChatSession(user.id, currentChatId, titleResult.title);
-                                chatTitleRef.current.add(currentChatId);
+                                markChatAsTitled(currentChatId);
 
-                                if (titleResult.fallback) {
-                                    console.log(`Used fallback title: "${titleResult.title}"`);
-                                } else {
-                                    console.log(`AI-generated title: "${titleResult.title}"`);
-                                }
+                                console.log(titleResult.fallback 
+                                    ? `Used fallback title: "${titleResult.title}"`
+                                    : `AI-generated title: "${titleResult.title}"`
+                                );
                                 
                                 // Refresh sessions to show new title
                                 loadChatSessions();
@@ -256,19 +271,8 @@ export const useChat = () => {
             loadChatSessions();
         } catch (error) {
             console.error("Inference call failed:", error);
-            setMessages(prev => {
-                const newMessages = [...prev];
-                const lastMessageIndex = newMessages.length - 1;
-                newMessages[lastMessageIndex] = {
-                    ...newMessages[lastMessageIndex],
-                    content: 'Sorry, the AI encountered an error.',
-                    status: 'error',
-                    timestamp: new Date().toISOString(),
-                };
-                return newMessages;
-            });
-            
-            messagesSentInSessionRef.current += 2;
+            updateLastMessage('Sorry, the AI encountered an error.', 'error');
+            incrementMessagesSent(2);
         } finally {
             setIsLoading(false);
         }
@@ -295,6 +299,7 @@ export const useChat = () => {
 
         try {
             await authChatService.deleteChatSession(user.id, chatId);
+            unmarkChatAsTitled(chatId);
             
             // If we deleted the current chat, switch to another or create new
             if (chatId === currentChatId) {
@@ -318,7 +323,7 @@ export const useChat = () => {
 
         try {
             await authChatService.updateChatSession(user.id, chatId, newTitle);
-            chatTitleRef.current.add(chatId);
+            markChatAsTitled(chatId);
             await loadChatSessions();
         } catch (error) {
             console.error("Failed to update chat title", error);
