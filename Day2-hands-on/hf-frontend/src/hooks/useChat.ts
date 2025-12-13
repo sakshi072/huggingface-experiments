@@ -8,6 +8,7 @@ import { useChatStore } from "../stores/chatStore";
 import { useAuthStore } from "../stores/authStore";
 
 const PAGE_SIZE = 10;
+const SESSIONS_PAGE_SIZE = 20;
 
 export const useChat = () => {
     const { user, isLoaded } = useUser();
@@ -18,6 +19,9 @@ export const useChat = () => {
         isLoading,
         isPaginating,
         hasMore,
+        hasMoreSessions,
+        sessionOffset,
+        isLoadingSessions,
         messagesLoadedFromHistory,
         messagesSentInSession,
         setMessages,
@@ -25,12 +29,16 @@ export const useChat = () => {
         updateLastMessage,
         setCurrentChatId,
         setChatSessions,
+        appendChatSessions,
         setIsLoading,
         setIsPaginating,
         setHasMore,
+        setHasMoreSessions,
+        incrementSessionsOffset,
+        setIsLoadingSessions,
+        resetSessionsPagination,
         incrementMessagesLoaded,
         incrementMessagesSent,
-        resetPaginationTracking,
         markChatAsTitled,
         isChatTitled,
         unmarkChatAsTitled,
@@ -66,40 +74,39 @@ export const useChat = () => {
         if (!user?.id) return;
         
         try {
-            const sessions = await authChatService.getChatSession(user.id);
+            // FIX: Pass limit and offset parameters
+            const sessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
             const sortedSessions = sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
             
             setChatSessions(sortedSessions);
+            // Set hasMoreSessions if we got a full page
+            setHasMoreSessions(sessions.length === SESSIONS_PAGE_SIZE);
 
             // Auto-select or create first chat
             if (sortedSessions.length > 0) {
-                // User has existing chats - select the most recent one
                 setCurrentChatId(sortedSessions[0].chat_id);
-                
+
                 sortedSessions.forEach(session => {
                     if(session.title !=='New Chat'){
                         markChatAsTitled(session.chat_id);
                     }
                 });
             } else {
-                // New user - create their first chat automatically
                 console.log("New user detected - creating first chat...");
                 const newChat = await authChatService.createChatSession(user.id, "New Chat");
                 setCurrentChatId(newChat.chat_id);
                 
                 // Refresh the session list
-                const updatedSessions = await authChatService.getChatSession(user.id);
+                const updatedSessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
                 setChatSessions(updatedSessions);
             }
         } catch (error) {
             console.error("Failed to initialize chats:", error);
-            // Even on error, try to create a chat so user can start
             try {
                 const newChat = await authChatService.createChatSession(user.id, "New Chat");
                 setCurrentChatId(newChat.chat_id);
-
                 await loadChatSessions();
             } catch (createError) {
                 console.error("Failed to create fallback chat:", createError);
@@ -111,14 +118,79 @@ export const useChat = () => {
         if (!user?.id) return;
         
         try {
-            const sessions = await authChatService.getChatSession(user.id);
+            // FIX: Pass limit and offset parameters
+            const sessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
             setChatSessions(sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             ));
+            setHasMoreSessions(sessions.length === SESSIONS_PAGE_SIZE);
         } catch (error) {
             console.error("Failed to load chat sessions:", error);
         }
     };
+
+    const loadMoreSessions = useCallback(async () => {
+        if (!user?.id || isLoadingSessions || !hasMoreSessions) {
+            console.log('loadMoreSessions early return:', { 
+                hasUser: !!user?.id, 
+                isLoadingSessions, 
+                hasMoreSessions 
+            });
+            return;
+        }
+
+        console.log('Loading more sessions, offset:', sessionOffset);
+        setIsLoadingSessions(true);
+
+        try {
+            const sessions = await authChatService.getChatSession(
+                user.id,
+                SESSIONS_PAGE_SIZE,
+                sessionOffset
+            );
+
+            console.log('Loaded sessions:', sessions.length);
+
+            if (sessions.length === 0) {
+                console.log('No more sessions to load');
+                setHasMoreSessions(false);
+                return;
+            }
+
+            const sortedSession = sessions.sort((a,b) => 
+                new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+            );
+
+            appendChatSessions(sortedSession);
+            incrementSessionsOffset(sortedSession.length);
+
+            sortedSession.forEach(session => {
+                if(session.title !== 'New Chat') {
+                    markChatAsTitled(session.chat_id)
+                }
+            });
+
+            if(sessions.length < SESSIONS_PAGE_SIZE){
+                console.log('Loaded last page of sessions');
+                setHasMoreSessions(false);
+            }
+        } catch (error) {
+            console.error("Failed to load more sessions:", error);
+        } finally {
+            setIsLoadingSessions(false);
+        }
+
+    }, [
+        user?.id, 
+        sessionOffset, 
+        isLoadingSessions, 
+        hasMoreSessions,
+        appendChatSessions,
+        incrementSessionsOffset,
+        markChatAsTitled,
+        setHasMoreSessions,
+        setIsLoadingSessions
+    ]); // FIX: Added all dependencies
 
     const loadHistorySegment = useCallback(async () => {
         if (!user?.id || !currentChatId) return;
@@ -156,7 +228,6 @@ export const useChat = () => {
 
             incrementMessagesLoaded(newUniqueMessages.length);
             setMessages([...newUniqueMessages, ...messages]);
-                
 
             if (history.length < PAGE_SIZE) {
                 setHasMore(false);
@@ -257,7 +328,6 @@ export const useChat = () => {
                                     : `AI-generated title: "${titleResult.title}"`
                                 );
                                 
-                                // Refresh sessions to show new title
                                 loadChatSessions();
                             } catch (error) {
                                 console.error("Failed to save AI-generated title:", error);
@@ -269,7 +339,6 @@ export const useChat = () => {
                 }
             }
 
-            // Refresh chat sessions to update timestamps/counts
             loadChatSessions();
         } catch (error) {
             console.error("Inference call failed:", error);
@@ -286,6 +355,8 @@ export const useChat = () => {
         try {
             const newChat = await authChatService.createChatSession(user.id, "New Chat");
             setCurrentChatId(newChat.chat_id);
+
+            resetSessionsPagination();
             await loadChatSessions();
         } catch (error) {
             console.error("Failed to create new chat:", error);
@@ -303,17 +374,16 @@ export const useChat = () => {
             await authChatService.deleteChatSession(user.id, chatId);
             unmarkChatAsTitled(chatId);
             
-            // If we deleted the current chat, switch to another or create new
             if (chatId === currentChatId) {
                 const remainingSessions = chatSessions.filter(s => s.chat_id !== chatId);
                 if (remainingSessions.length > 0) {
                     setCurrentChatId(remainingSessions[0].chat_id);
                 } else {
-                    // No chats left - create a new one
                     await startNewChat();
                 }
             }
             
+            resetSessionsPagination();
             await loadChatSessions();
         } catch (error) {
             console.error("Failed to delete chat:", error);
@@ -339,6 +409,8 @@ export const useChat = () => {
     return {
         sendMessage,
         loadPreviousMessages,
+        loadMoreSessions,
+        hasMoreSessions,
         startNewChat,
         switchToChat,
         deleteChat,

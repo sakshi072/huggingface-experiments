@@ -3,6 +3,7 @@ import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton, useUser }
 import { useChat } from './hooks/useChat';
 import { ChatContainer } from './components/Chat/ChatContainer';
 import { Sidebar } from './components/Sidebar/Sidebar';
+import { useUIStore } from './stores';
 
 // Get your Clerk Publishable Key from environment variables
 const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -10,6 +11,7 @@ const CLERK_PUBLISHABLE_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const AuthenticatedApp: React.FC = () => {
   const chatLogic = useChat();
   const { user } = useUser();
+  const { toggleSidebar } = useUIStore();
 
   if (!chatLogic.isAuthenticated) {
     return (
@@ -23,18 +25,15 @@ const AuthenticatedApp: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-white">
+    <div className="flex h-screen bg-white relative">
+      {/* Global mobile hamburger */}
+      <button className="asolute top-4 left-4 z-30 p-2 bg-gray-900 text-white rounded-md lg:hidden"
+        onClick={toggleSidebar}>
+
+      </button>
       <Sidebar />
       
-      <div className="flex-grow lg:ml-80"> 
-        {/* User button in top right */}
-        <div className="absolute top-4 right-4 z-30 flex items-center gap-3">
-          <span className="text-sm text-gray-600 hidden sm:block">
-            {user?.firstName || user?.username || 'User'}
-          </span>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-        
+      <div className="flex-grow"> 
         <ChatContainer  />
       </div>
     </div>

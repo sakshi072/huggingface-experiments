@@ -13,6 +13,10 @@ interface ChatState {
   isLoading: boolean;
   isPaginating: boolean;
   hasMore: boolean;
+
+  hasMoreSessions: boolean;
+  sessionOffset: number;
+  isLoadingSessions: boolean;
   
   // Pagination tracking
   messagesLoadedFromHistory: number;
@@ -28,7 +32,14 @@ interface ChatState {
   
   setCurrentChatId: (chatId: string | null) => void;
   setChatSessions: (sessions: ChatSessionMetadata[]) => void;
+  appendChatSessions: (sessions: ChatSessionMetadata[]) => void;
   
+  setHasMoreSessions: (hasMore: boolean) => void;
+  setSessionsOffset: (offset: number) => void;
+  incrementSessionsOffset: (count: number) => void;
+  setIsLoadingSessions: (loading: boolean) => void;
+  resetSessionsPagination: () => void;
+
   setIsLoading: (loading: boolean) => void;
   setIsPaginating: (paginating: boolean) => void;
   setHasMore: (hasMore: boolean) => void;
@@ -58,6 +69,10 @@ export const useChatStore = create<ChatState>()(
         isLoading: false,
         isPaginating: false,
         hasMore: false,
+
+        hasMoreSessions: false,
+        sessionOffset: 0,
+        isLoadingSessions: false,
         
         messagesLoadedFromHistory: 0,
         messagesSentInSession: 0,
@@ -89,13 +104,42 @@ export const useChatStore = create<ChatState>()(
         
         setCurrentChatId: (chatId) => set({ currentChatId: chatId }),
         
-        setChatSessions: (sessions) => set({ chatSessions: sessions }),
+        // FIX: Set offset when setting sessions
+        setChatSessions: (sessions) => set({ 
+          chatSessions: sessions,
+          sessionOffset: sessions.length  // Track how many we've loaded
+        }),
+
+        appendChatSessions: (sessions) => set((state) => {
+            const existingIds = new Set(state.chatSessions.map(s=>s.chat_id));
+            const newSessions = sessions.filter(s => !existingIds.has(s.chat_id))
+
+            return {
+                chatSessions: [...state.chatSessions, ...newSessions]
+            }
+
+        }),
         
         setIsLoading: (loading) => set({ isLoading: loading }),
         
         setIsPaginating: (paginating) => set({ isPaginating: paginating }),
         
         setHasMore: (hasMore) => set({ hasMore: hasMore }),
+
+        setHasMoreSessions: (hasMore) => set({hasMoreSessions: hasMore}),
+
+        setSessionsOffset: (session) => set({sessionOffset:session}),
+        
+        incrementSessionsOffset: (count) => set((state) => ({
+            sessionOffset: state.sessionOffset + count
+        })),
+        
+        setIsLoadingSessions:(loadingSession) => set({isLoadingSessions: loadingSession}),
+        
+        resetSessionsPagination: () => set({
+            sessionOffset: 0,
+            hasMoreSessions: false
+        }),
         
         incrementMessagesLoaded: (count) => set((state) => ({
           messagesLoadedFromHistory: state.messagesLoadedFromHistory + count
@@ -136,6 +180,9 @@ export const useChatStore = create<ChatState>()(
           isLoading: false,
           isPaginating: false,
           hasMore: false,
+          sessionOffset: 0,
+          hasMoreSessions: false,
+          isLoadingSessions: false,
           messagesLoadedFromHistory: 0,
           messagesSentInSession: 0,
           chatsTitled: new Set<string>(),

@@ -94,7 +94,7 @@ class MongoChatClient:
             logger.error(f"Error creating chat session: {e}", exc_info=True)
             return None
     
-    def get_user_chat_sessions(self, user_id: str) -> List[ChatSessionMetadata]:
+    def get_user_chat_sessions(self, user_id: str, limit: int = 10, offset: int = 0) -> List[ChatSessionMetadata]:
         """
         Retrieves all chat sessions for a user, sorted by most recent activity.
         
@@ -113,10 +113,16 @@ class MongoChatClient:
                 self.metadata_collection.find(
                     {"user_id": user_id},
                     {"_id": 0}
-                ).sort("updated_at", DESCENDING)
+                )
+                .sort("updated_at", DESCENDING)
+                .skip(offset)
+                .limit(limit)
             )
 
-            logger.info(f"Retrieved {len(sessions)} chat sessions for user: {user_id[:8]}...")
+            logger.info(
+                f"Retrieved {len(sessions)} chat sessions for user: {user_id[:8]}... "
+                f"(limit={limit}, offset={offset})"
+            )
             return [ChatSessionMetadata(**session) for session in sessions]
 
         except Exception as e:

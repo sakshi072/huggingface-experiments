@@ -273,7 +273,9 @@ async def create_chat_session(
 async def get_user_chat_sessions(
     user_id:str,
     request_id:str,
-    correlation_id:str
+    correlation_id:str,
+    limit:int,
+    offset:int
 ) -> List[ChatSessionMetadata]:
     """Retrieves all chat sessions for a specific user."""
     
@@ -282,7 +284,9 @@ async def get_user_chat_sessions(
     try:
         sessions = await run_in_threadpool(
             MONGO_CHAT_CLIENT.get_user_chat_sessions,
-            user_id
+            user_id,
+            limit,
+            offset
         )
         logger.info(f"{log_prefix} Retrieved {len(sessions)} chat sessions.")
         return sessions

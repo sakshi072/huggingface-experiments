@@ -18,7 +18,7 @@ export const PromptInput: React.FC<PromptInputProps> = ({ onSend, isLoading }) =
   };
 
   return (
-    <div className="p-4 bg-white border-t fixed bottom-0 left-0 right-0 lg:left-80 z-10">
+    <div className="p-4 bg-white bottom-0 left-0 right-0 lg:left-80 z-10">
       <form onSubmit={handleSubmit} className="flex max-w-4xl mx-auto">
         <input
           type="text"

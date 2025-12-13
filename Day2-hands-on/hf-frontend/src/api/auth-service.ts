@@ -44,10 +44,14 @@ export const authChatService = {
      * GET /chat/sessions - Get all chat sessions for a user
      */
 
-    async getChatSession(userId:string): Promise<ChatSessionMetadata[]>{
+    async getChatSession(userId:string, limit: number = 10, offset: number = 0): Promise<ChatSessionMetadata[]>{
         const response = await API.get<{ sessions: ChatSessionMetadata[]}>(
             '/chat/sessions',
             {
+                params:{
+                    limit: limit,
+                    offset:offset
+                },
                 headers: {
                     'user-id': userId,
                 }

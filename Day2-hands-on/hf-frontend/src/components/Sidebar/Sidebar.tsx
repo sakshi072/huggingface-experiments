@@ -1,16 +1,27 @@
-import React, {useState} from "react";
+import React, {useState, useRef, useEffect, useCallback} from "react";
 import { ConfirmationModal } from "../Modals/ConfirmationModal";
 import { EditTitleModal } from "../Modals/EditTitleModal";
-import { useChatStore } from "../../stores";
+import { useChatStore, useUIStore } from "../../stores";
 import { useChat } from "../../hooks/useChat";
+import { HamburgerButton } from "../Buttons/HumburgerButton";
+import { UserButton, useUser } from "@clerk/clerk-react";
+
+const SESSIONS_PER_PAGE = 20;
 
 export const Sidebar: React.FC = () => {
-    const { chatSessions, currentChatId } = useChatStore();
-    const { startNewChat, switchToChat, deleteChat, updateChatTitle } = useChat();
+    const { chatSessions, currentChatId, hasMoreSessions } = useChatStore();
+    const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
+    const { startNewChat, switchToChat, deleteChat, updateChatTitle, loadMoreSessions } = useChat();
+    const {user} = useUser();
 
     const [chatToDelete, setChatToDelete] = useState<{ id:string; title:string } | null>(null);
     const [chatToEdit, setChatToEdit] = useState<{ id:string; title:string } | null>(null);
-    
+    const [isLoadingMoreSessions, setIsLoadingMoreSessions] = useState(false);
+    // const [isSideBarOpen, setIsSideBarOpen] = useState(false);
+
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const isLoadingMoreRef = useRef(false);
+
     const formatDate = (dateString:string) => {
         const date = new Date(dateString);
         const now = new Date();
@@ -51,20 +62,84 @@ export const Sidebar: React.FC = () => {
         }
     }
 
+    // Fixed scroll handler
+    const handleScroll = useCallback(() => {
+        if(!scrollContainerRef.current || !loadMoreSessions) return;
+
+        if(isLoadingMoreRef.current || !hasMoreSessions) return;
+
+        const container = scrollContainerRef.current;
+        const { scrollTop, scrollHeight, clientHeight } = container;
+
+        // Load more when scrolled near the bottom (within 100px)
+        if (scrollHeight - scrollTop - clientHeight < 100) {
+            isLoadingMoreRef.current = true;
+            setIsLoadingMoreSessions(true);
+
+            loadMoreSessions().finally(() => {
+                setIsLoadingMoreSessions(false);
+                setTimeout(()=>{
+                    isLoadingMoreRef.current = false;
+                }, 500)
+            });
+        }
+    }, [loadMoreSessions, hasMoreSessions]);
+
+    useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return; 
+
+        container.addEventListener('scroll', handleScroll, { passive: true });
+
+        return () => {
+            container.removeEventListener('scroll', handleScroll);
+        }
+    }, [handleScroll])
+
+    const collapsedClass = isSidebarOpen ? 'lg:w-80' : 'lg:w-16';
+    const mobileCollapseClass = isSidebarOpen ? 'translate-x-0' : '-translate-x-full';
+    const contentVisibleClass = isSidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2 pointer-events-none';
+    // Compute classes based on isSidebarOpen
+    const bottomSectionVisibleClass = isSidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 pointer-events-none';
+    const bottomTextHiddenClass = !isSidebarOpen ? 'lg:hidden' : '';
+    const bottomRowJustifyClass = isSidebarOpen ? 'justify-between px-2' : 'justify-center';
+
+
     return (
-        <>
-            <div className="w-full lg:w-80 bg-gray-900 text-white flex flex-col fixed inset-y-0 left-0 p-4 border-r border-gray-700 z-20">
-            <h2 className="text-xl font-bold mb-6">🤗 HUGG Chat</h2>
-            
+        <>  
+            <div className={`
+                    w-full ${collapsedClass} bg-gray-900 text-white flex flex-col h-full p-4 border-r border-gray-700 z-20
+                    transition-all duration-300 ease-in-out
+                    
+                    fixed inset-y-0 left-0 lg:static ${mobileCollapseClass} 
+                    lg:flex-shrink-0 lg:h-full lg:translate-x-0
+                `}>
+            <div className="flex items-center justify-between mb-6">
+            <h2 className={`text-xl font-bold whitespace-nowrap ${!isSidebarOpen && 'lg:hidden'}`}>
+                        🤗 HUGG Chat
+                    </h2>
+                <HamburgerButton 
+                    isOpen={isSidebarOpen} 
+                    setIsOpen={toggleSidebar} 
+                />
+            </div>
             <button 
                 onClick={startNewChat} 
-                className="w-full py-2 px-4 mb-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
-            >
+                className={`w-full py-2 px-4 mb-4 border border-gray-600 rounded-lg hover:bg-gray-700 transition-colors flex items-center justify-center gap-2 ${!isSidebarOpen && 'lg:py-4 lg:w-full'}`}
+                >
                 <span>➕</span>
-                <span>New Chat</span>
+                <span className={`${!isSidebarOpen && 'lg:hidden'}`}>New Chat</span>
             </button>
         
-            <div className="flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600">
+            <div
+                ref={scrollContainerRef} 
+                className={`flex-grow overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 transition-all duration-300 ${contentVisibleClass}`}
+                style={{
+                    // Ensure scroll is visible
+                    overflowY: 'auto',
+                    maxHeight: '100%'
+                }}
+            >
                 {chatSessions.length === 0 ? (
                 <div className="text-center text-gray-400 mt-8">
                     <p className="text-sm">No chats yet</p>
@@ -140,16 +215,56 @@ export const Sidebar: React.FC = () => {
                         </div>
                     </div>
                     ))}
+
+                    {/* Loading indicator */}
+                    {isLoadingMoreSessions && (
+                        <div className="text-center py-4 text-blue-400">
+                            <div className="flex items-center justify-center gap-2">
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <span className="text-sm">Loading more...</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* End of list indicator */}
+                    {!hasMoreSessions && chatSessions.length > SESSIONS_PER_PAGE && (
+                        <div className="text-center py-4 text-gray-500">
+                            <span className="text-xs">• All chats loaded •</span>
+                        </div>
+                    )}
                 </div>
                 )}
             </div>
         
-            <div className="mt-4 pt-4 border-t border-gray-700">
+            <div className={`mt-4 pt-4 border-t border-gray-700 ${bottomSectionVisibleClass}`}>
                 <p className="text-xs text-gray-500 text-center">
-                {chatSessions.length} {chatSessions.length === 1 ? 'conversation' : 'conversations'}
+                {chatSessions.length} {chatSessions.length === 1 ? 'chat' : 'chats'}
+                {hasMoreSessions && ' (scroll for more)'}
                 </p>
             </div>
+            {/* User section pinned to bottom */}
+            <div className={`mt-3 pt-3 border-t border-gray-700 flex items-center justify-between gap-3 ${bottomRowJustifyClass}`}>
+            <div className="flex flex-col min-w-0">
+                <span className={`text-xs font-medium truncate ${bottomTextHiddenClass}`}>
+                {user?.firstName || user?.username || 'User'}
+                </span>
+                <span className={`text-[10px] text-gray-500 ${bottomTextHiddenClass}`}>
+                Account & settings
+                </span>
             </div>
+                <UserButton afterSignOutUrl="/" />
+            </div>
+            </div>
+
+            {isSidebarOpen && (
+                <div
+                    className="fixed inset-0 bg-black opacity-50 z-10 lg:hidden"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
 
             {/* Confirmation Modal */}
             <ConfirmationModal
@@ -169,6 +284,7 @@ export const Sidebar: React.FC = () => {
                 onSave={handleSaveTitle}
                 onCancel={() => setChatToEdit(null)}
             />
+                    
         </>
     );
 

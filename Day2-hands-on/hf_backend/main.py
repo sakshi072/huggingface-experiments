@@ -99,6 +99,8 @@ async def create_chat_session(
 @app.get("/chat/sessions", response_model=ChatSessionsResponse)  # Fixed typo
 async def get_chat_sessions(
     user_id: Optional[str] = Header(None, alias="user-id"),
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of sessions to return"),
+    offset: int = Query(0, ge=0, description="Number of sessions to skip"),
     x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
     x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID")
 ):
@@ -110,7 +112,9 @@ async def get_chat_sessions(
     sessions = await service.get_user_chat_sessions(
         user_id=user_id,
         request_id=x_request_id,
-        correlation_id=x_correlation_id
+        correlation_id=x_correlation_id,
+        limit=limit,
+        offset=offset
     )
 
     return ChatSessionsResponse(sessions=sessions)  # Fixed typo
