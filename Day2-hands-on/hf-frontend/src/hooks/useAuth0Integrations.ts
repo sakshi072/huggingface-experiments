@@ -3,6 +3,7 @@ import { useAuth0 } from '@auth0/auth0-react';
 import { setAuthToken, clearAuthTokens } from '../api/axios-instance';
 import { TOKEN_STORAGE_KEYS } from '../config/auth0-config';
 import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores';
 
 export function useAuth0Integration() {
     const {
@@ -84,6 +85,10 @@ export function useAuth0Integration() {
 
         clearAuthTokens();
         resetAuth();
+
+        // FIXED: Also reset chat state on logout
+        console.log('[Auth0 Integration] Clearing chat state...');
+        useChatStore.getState().resetAllState();
 
         auth0Logout({
             logoutParams: {

@@ -1,4 +1,4 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import type { HistoryMessage } from "../types/chat-types";
 import { chatService } from "../api/chat-service";
@@ -10,8 +10,13 @@ import { useAuthStore } from "../stores/authStore";
 const PAGE_SIZE = 10;
 const SESSIONS_PAGE_SIZE = 12;
 
+// GLOBAL singleton to prevent multiple simultaneous initializations
+let globalInitPromise: Promise<void> | null = null;
+let globalInitInProgress = false;
+let lastInitUserId: string | null = null;
+
 export const useChat = () => {
-    const { isAuthenticated, isLoading } = useAuth0()
+    const { isAuthenticated, isLoading, user } = useAuth0()
     const {
         messages,
         currentChatId,
@@ -52,66 +57,122 @@ export const useChat = () => {
         setHasInitialized
     } = useAuthStore();
 
-    // Load user's chat sessions when authenticated
+    const prevAuthState = useRef(isAuthenticated);
+
+    // FIXED: Only ONE useEffect for auth state - removed duplicate
     useEffect(() => {
-        setIsLoaded(isLoading);
+        setIsLoaded(!isLoading);
         setIsAuthenticated(isAuthenticated);
         
-    }, [isLoading, isAuthenticated, setIsLoaded, setIsAuthenticated]);
-
-    // Initialize chats when authenticated
-    useEffect(() => {
-        if (!isLoading && isAuthenticated && !hasInitialized) {
-            setHasInitialized(true);
-            initializeChats();
+        // Reset on logout
+        if (prevAuthState.current && !isAuthenticated) {
+            console.log('[useChat] 🚪 User logged out - resetting state');
+            useChatStore.getState().resetAllState();
+            setHasInitialized(false);
+            globalInitPromise = null;
+            globalInitInProgress = false;
+            lastInitUserId = null;
         }
-    }, [isLoading, isAuthenticated, hasInitialized, setHasInitialized]);
+        
+        prevAuthState.current = isAuthenticated;
+    }, [isLoading, isAuthenticated, setIsLoaded, setIsAuthenticated, setHasInitialized]);
+
+    // FIXED: Initialize chats with global singleton guard
+    useEffect(() => {
+        const currentUserId = user?.sub || null;
+        
+        // Skip if conditions not met
+        if (isLoading || !isAuthenticated || !currentUserId || hasInitialized) {
+            return;
+        }
+
+        // If same user already initialized, skip
+        if (lastInitUserId === currentUserId) {
+            console.log('[useChat] ⏭️ Already initialized for this user');
+            setHasInitialized(true);
+            return;
+        }
+
+        // If initialization in progress, wait for it
+        if (globalInitInProgress) {
+            console.log('[useChat] ⏳ Initialization in progress, waiting...');
+            if (globalInitPromise) {
+                globalInitPromise.then(() => {
+                    setHasInitialized(true);
+                });
+            }
+            return;
+        }
+
+        // Start initialization
+        globalInitInProgress = true;
+        lastInitUserId = currentUserId;
+        setHasInitialized(true);
+        
+        globalInitPromise = initializeChats()
+            .catch((error) => {
+                setHasInitialized(false);
+                globalInitInProgress = false;
+                lastInitUserId = null;
+            })
+            .finally(() => {
+                globalInitInProgress = false;
+                setTimeout(() => {
+                    globalInitPromise = null;
+                }, 1000);
+            });
+            
+    }, [isLoading, isAuthenticated, hasInitialized, user, setHasInitialized]);
 
     const initializeChats = async () => {
         try {
-            // FIX: Pass limit and offset parameters
             const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
+            
             const sortedSessions = sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
             
             setChatSessions(sortedSessions);
-            // Set hasMoreSessions if we got a full page
             setHasMoreSessions(sessions.length === SESSIONS_PAGE_SIZE);
 
-            // Auto-select or create first chat
+            // Mark titled sessions
+            sortedSessions.forEach(session => {
+                if(session.title !== 'New Chat'){
+                    markChatAsTitled(session.chat_id);
+                }
+            });
+
             if (sortedSessions.length > 0) {
                 setCurrentChatId(sortedSessions[0].chat_id);
-
-                sortedSessions.forEach(session => {
-                    if(session.title !=='New Chat'){
-                        markChatAsTitled(session.chat_id);
-                    }
-                });
             } else {
-                console.log("New user detected - creating first chat...");
                 const newChat = await authChatService.createChatSession("New Chat");
                 setCurrentChatId(newChat.chat_id);
                 
-                // Refresh the session list
-                const updatedSessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
-                setChatSessions(updatedSessions);
+                // Add to local state immediately
+                const newSession = {
+                    chat_id: newChat.chat_id,
+                    user_id: user?.sub || '',
+                    title: newChat.title,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    message_count: 0
+                };
+                setChatSessions([newSession]);
+                
+                // Refresh from server
+                setTimeout(async () => {
+                    const updated = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
+                    setChatSessions(updated);
+                }, 300);
             }
         } catch (error) {
-            console.error("Failed to initialize chats:", error);
-            try {
-                const newChat = await authChatService.createChatSession("New Chat");
-                setCurrentChatId(newChat.chat_id);
-                await loadChatSessions();
-            } catch (createError) {
-                console.error("Failed to create fallback chat:", createError);
-            }
+            console.error("[useChat] ❌ Init failed:", error);
+            throw error;
         }
     };
 
     const loadChatSessions = async () => {
         try {
-            // FIX: Pass limit and offset parameters
             const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
             setChatSessions(sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
@@ -124,10 +185,6 @@ export const useChat = () => {
 
     const loadMoreSessions = useCallback(async () => {
         if (isLoadingSessions || !hasMoreSessions) {
-            console.log('loadMoreSessions early return:', {  
-                isLoadingSessions, 
-                hasMoreSessions 
-            });
             return;
         }
 
@@ -143,7 +200,6 @@ export const useChat = () => {
             console.log('Loaded sessions:', sessions.length);
 
             if (sessions.length === 0) {
-                console.log('No more sessions to load');
                 setHasMoreSessions(false);
                 return;
             }
@@ -162,7 +218,6 @@ export const useChat = () => {
             });
 
             if(sessions.length < SESSIONS_PAGE_SIZE){
-                console.log('Loaded last page of sessions');
                 setHasMoreSessions(false);
             }
         } catch (error) {
@@ -180,7 +235,7 @@ export const useChat = () => {
         markChatAsTitled,
         setHasMoreSessions,
         setIsLoadingSessions
-    ]); // FIX: Added all dependencies
+    ]);
 
     const loadHistorySegment = useCallback(async () => {
         if (!currentChatId || isPaginating || chatIsLoading || !hasMore) return;
@@ -230,6 +285,7 @@ export const useChat = () => {
     useEffect(() => {
         if (!currentChatId) return;
 
+        console.log(`[useChat] 💬 Chat changed to: ${currentChatId.slice(0,8)}`);
         resetMessages();
         
         const loadInitial = async () => {
@@ -254,8 +310,14 @@ export const useChat = () => {
                 if (history.length >= PAGE_SIZE) {
                     setHasMore(true);
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Failed to load initial history:", error);
+                
+                // Handle 403 - user doesn't own this chat
+                if (error?.response?.status === 403) {
+                    console.warn('[useChat] ⚠️ 403 error - creating new chat');
+                    await startNewChat();
+                }
             } finally {
                 setIsLoading(false);
             }
@@ -348,6 +410,7 @@ export const useChat = () => {
     };
 
     const switchToChat = (chatId: string) => {
+        console.log(`[useChat] 🔄 Switching to: ${chatId.slice(0,8)}`);
         setCurrentChatId(chatId);
     };
 
