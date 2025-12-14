@@ -1,6 +1,4 @@
-import axios from "axios";
-
-const API_BASE_URL = 'http://127.0.0.1:8000';
+import apiClient from "./axios-instance";
 
 export interface ChatSessionMetadata {
     chat_id: string;
@@ -16,26 +14,15 @@ export interface CreateChatResponse {
     title:string;
 }
 
-const API = axios.create({
-    baseURL:API_BASE_URL,
-    headers:{
-        'Content-Type' : 'application/json',
-    }
-});
 
 export const authChatService = {
     /**
      * POST /chat/sessions - Create a new chat session
      */
-    async createChatSession(userId:string, title?:string): Promise<CreateChatResponse> {
-        const response = await API.post<CreateChatResponse>(
+    async createChatSession(title?:string): Promise<CreateChatResponse> {
+        const response = await apiClient.post<CreateChatResponse>(
             '/chat/sessions',
             {title: title || 'New Chat'},
-            {
-                headers:{
-                    'user-id':userId
-                }
-            }
         );
         return response.data;
     },
@@ -44,16 +31,13 @@ export const authChatService = {
      * GET /chat/sessions - Get all chat sessions for a user
      */
 
-    async getChatSession(userId:string, limit: number = 10, offset: number = 0): Promise<ChatSessionMetadata[]>{
-        const response = await API.get<{ sessions: ChatSessionMetadata[]}>(
+    async getChatSession(limit: number = 10, offset: number = 0): Promise<ChatSessionMetadata[]>{
+        const response = await apiClient.get<{ sessions: ChatSessionMetadata[]}>(
             '/chat/sessions',
             {
                 params:{
                     limit: limit,
                     offset:offset
-                },
-                headers: {
-                    'user-id': userId,
                 }
             }
         );
@@ -64,26 +48,17 @@ export const authChatService = {
      * DELETE /chat/sessions/{chat_id} - Delete a specific chat session
      */
 
-    async deleteChatSession(userId:string, chatId:string): Promise<void> {
-        await API.delete(`/chat/sessions/${chatId}`,{
-            headers:{
-                'user-id':userId,
-            }
-        });
+    async deleteChatSession(chatId:string): Promise<void> {
+        await apiClient.delete(`/chat/sessions/${chatId}`);
     },
 
     /**
      * PATCH /chat/sessions/{chat_id}/title - Update chat title
      */
-    async updateChatSession(userId:string, chatId:string, title:string): Promise<void> {
-        await API.patch(
+    async updateChatSession(chatId:string, title:string): Promise<void> {
+        await apiClient.patch(
             `/chat/sessions/${chatId}/title`,
-            {title},
-            {
-                headers:{
-                    'user-id': userId,
-                }
-            }
+            {title}
         );
     }
 };

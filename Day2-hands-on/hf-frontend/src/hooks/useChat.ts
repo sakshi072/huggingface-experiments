@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from "react";
-import { useUser } from "@clerk/clerk-react";
+import { useAuth0 } from "@auth0/auth0-react";
 import type { HistoryMessage } from "../types/chat-types";
 import { chatService } from "../api/chat-service";
 import { authChatService } from "../api/auth-service";
@@ -8,15 +8,15 @@ import { useChatStore } from "../stores/chatStore";
 import { useAuthStore } from "../stores/authStore";
 
 const PAGE_SIZE = 10;
-const SESSIONS_PAGE_SIZE = 20;
+const SESSIONS_PAGE_SIZE = 12;
 
 export const useChat = () => {
-    const { user, isLoaded } = useUser();
+    const { isAuthenticated, isLoading } = useAuth0()
     const {
         messages,
         currentChatId,
         chatSessions,
-        isLoading,
+        isLoading: chatIsLoading,
         isPaginating,
         hasMore,
         hasMoreSessions,
@@ -47,7 +47,6 @@ export const useChat = () => {
     
     const {
         hasInitialized,
-        setUserId,
         setIsAuthenticated,
         setIsLoaded,
         setHasInitialized
@@ -55,27 +54,23 @@ export const useChat = () => {
 
     // Load user's chat sessions when authenticated
     useEffect(() => {
-        setIsLoaded(isLoaded);
-        setIsAuthenticated(isLoaded && !!user);
-        if(user?.id){
-            setUserId(user.id);
-        }
-    }, [isLoaded, user, setIsLoaded, setIsAuthenticated, setUserId]);
+        setIsLoaded(isLoading);
+        setIsAuthenticated(isAuthenticated);
+        
+    }, [isLoading, isAuthenticated, setIsLoaded, setIsAuthenticated]);
 
     // Initialize chats when authenticated
     useEffect(() => {
-        if (isLoaded && user?.id && !hasInitialized) {
+        if (!isLoading && isAuthenticated && !hasInitialized) {
             setHasInitialized(true);
             initializeChats();
         }
-    }, [isLoaded, user?.id, hasInitialized, setHasInitialized]);
+    }, [isLoading, isAuthenticated, hasInitialized, setHasInitialized]);
 
     const initializeChats = async () => {
-        if (!user?.id) return;
-        
         try {
             // FIX: Pass limit and offset parameters
-            const sessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
+            const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
             const sortedSessions = sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
@@ -95,17 +90,17 @@ export const useChat = () => {
                 });
             } else {
                 console.log("New user detected - creating first chat...");
-                const newChat = await authChatService.createChatSession(user.id, "New Chat");
+                const newChat = await authChatService.createChatSession("New Chat");
                 setCurrentChatId(newChat.chat_id);
                 
                 // Refresh the session list
-                const updatedSessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
+                const updatedSessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
                 setChatSessions(updatedSessions);
             }
         } catch (error) {
             console.error("Failed to initialize chats:", error);
             try {
-                const newChat = await authChatService.createChatSession(user.id, "New Chat");
+                const newChat = await authChatService.createChatSession("New Chat");
                 setCurrentChatId(newChat.chat_id);
                 await loadChatSessions();
             } catch (createError) {
@@ -115,11 +110,9 @@ export const useChat = () => {
     };
 
     const loadChatSessions = async () => {
-        if (!user?.id) return;
-        
         try {
             // FIX: Pass limit and offset parameters
-            const sessions = await authChatService.getChatSession(user.id, SESSIONS_PAGE_SIZE, 0);
+            const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
             setChatSessions(sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             ));
@@ -130,9 +123,8 @@ export const useChat = () => {
     };
 
     const loadMoreSessions = useCallback(async () => {
-        if (!user?.id || isLoadingSessions || !hasMoreSessions) {
-            console.log('loadMoreSessions early return:', { 
-                hasUser: !!user?.id, 
+        if (isLoadingSessions || !hasMoreSessions) {
+            console.log('loadMoreSessions early return:', {  
                 isLoadingSessions, 
                 hasMoreSessions 
             });
@@ -144,7 +136,6 @@ export const useChat = () => {
 
         try {
             const sessions = await authChatService.getChatSession(
-                user.id,
                 SESSIONS_PAGE_SIZE,
                 sessionOffset
             );
@@ -181,7 +172,6 @@ export const useChat = () => {
         }
 
     }, [
-        user?.id, 
         sessionOffset, 
         isLoadingSessions, 
         hasMoreSessions,
@@ -193,16 +183,13 @@ export const useChat = () => {
     ]); // FIX: Added all dependencies
 
     const loadHistorySegment = useCallback(async () => {
-        if (!user?.id || !currentChatId) return;
-        if (isPaginating || isLoading || !hasMore) return;
+        if (!currentChatId || isPaginating || chatIsLoading || !hasMore) return;
 
         setIsPaginating(true);
 
         try {
             const offset = messagesLoadedFromHistory + messagesSentInSession;
-            
             const history: HistoryMessage[] = await chatService.getHistory(
-                user.id,
                 currentChatId,
                 PAGE_SIZE,
                 offset
@@ -237,11 +224,11 @@ export const useChat = () => {
         } finally {
             setIsPaginating(false);
         }
-    }, [user?.id, currentChatId, hasMore, isLoading, isPaginating]);
+    }, [currentChatId, hasMore, chatIsLoading, isPaginating]);
 
     // Load initial history when chat changes
     useEffect(() => {
-        if (!user?.id || !currentChatId) return;
+        if (!currentChatId) return;
 
         resetMessages();
         
@@ -249,7 +236,6 @@ export const useChat = () => {
             setIsLoading(true);
             try {
                 const history: HistoryMessage[] = await chatService.getHistory(
-                    user.id,
                     currentChatId,
                     PAGE_SIZE,
                     0
@@ -276,10 +262,10 @@ export const useChat = () => {
         };
 
         loadInitial();
-    }, [user?.id, currentChatId]);
+    }, [currentChatId]);
 
     const sendMessage = async (prompt: string) => {
-        if (!user?.id || !currentChatId || !prompt.trim() || isLoading) return;
+        if (!currentChatId || !prompt.trim() || chatIsLoading) return;
 
         setIsLoading(true);
 
@@ -303,7 +289,7 @@ export const useChat = () => {
         addMessage(loadingAssistantMessage)
 
         try {
-            const response = await chatService.getInference(user.id, currentChatId, prompt);
+            const response = await chatService.getInference(currentChatId, prompt);
 
             updateLastMessage(response.response, 'sent');
             incrementMessagesSent(2);
@@ -317,10 +303,10 @@ export const useChat = () => {
             if(shouldAutoTitle){
                 const currentChat = chatSessions.find(s => s.chat_id === currentChatId);
                 if (currentChat && currentChat.title === 'New Chat' && currentChat.message_count===0){
-                    smartTitleService.generateTitle(user.id, prompt, response.response)
+                    smartTitleService.generateTitle(prompt, response.response)
                         .then(async (titleResult) => {
                             try {
-                                await authChatService.updateChatSession(user.id, currentChatId, titleResult.title);
+                                await authChatService.updateChatSession(currentChatId, titleResult.title);
                                 markChatAsTitled(currentChatId);
 
                                 console.log(titleResult.fallback 
@@ -350,10 +336,8 @@ export const useChat = () => {
     };
 
     const startNewChat = async () => {
-        if (!user?.id) return;
-
         try {
-            const newChat = await authChatService.createChatSession(user.id, "New Chat");
+            const newChat = await authChatService.createChatSession("New Chat");
             setCurrentChatId(newChat.chat_id);
 
             resetSessionsPagination();
@@ -368,10 +352,8 @@ export const useChat = () => {
     };
 
     const deleteChat = async (chatId: string) => {
-        if (!user?.id) return;
-
         try {
-            await authChatService.deleteChatSession(user.id, chatId);
+            await authChatService.deleteChatSession(chatId);
             unmarkChatAsTitled(chatId);
             
             if (chatId === currentChatId) {
@@ -391,10 +373,8 @@ export const useChat = () => {
     };
 
     const updateChatTitle = async (chatId:string, newTitle:string) => {
-        if(!user?.id) return;
-
         try {
-            await authChatService.updateChatSession(user.id, chatId, newTitle);
+            await authChatService.updateChatSession(chatId, newTitle);
             markChatAsTitled(chatId);
             await loadChatSessions();
         } catch (error) {
@@ -415,6 +395,6 @@ export const useChat = () => {
         switchToChat,
         deleteChat,
         updateChatTitle,
-        isAuthenticated: isLoaded && !!user,
+        isAuthenticated: isAuthenticated,
     };
 };

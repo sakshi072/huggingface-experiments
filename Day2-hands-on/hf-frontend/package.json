@@ -10,9 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@clerk/clerk-react": "^5.57.1",
-    "@okta/okta-auth-js": "^7.14.1",
-    "@okta/okta-react": "^6.10.0",
+    "@auth0/auth0-react": "^2.2.4",
     "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
     "react": "^19.2.0",

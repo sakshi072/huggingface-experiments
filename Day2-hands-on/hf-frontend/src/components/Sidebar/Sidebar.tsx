@@ -4,7 +4,7 @@ import { EditTitleModal } from "../Modals/EditTitleModal";
 import { useChatStore, useUIStore } from "../../stores";
 import { useChat } from "../../hooks/useChat";
 import { HamburgerButton } from "../Buttons/HumburgerButton";
-import { UserButton, useUser } from "@clerk/clerk-react";
+import { UserProfile } from "../../App";
 
 const SESSIONS_PER_PAGE = 20;
 
@@ -12,7 +12,6 @@ export const Sidebar: React.FC = () => {
     const { chatSessions, currentChatId, hasMoreSessions } = useChatStore();
     const { isSidebarOpen, toggleSidebar, setSidebarOpen } = useUIStore();
     const { startNewChat, switchToChat, deleteChat, updateChatTitle, loadMoreSessions } = useChat();
-    const {user} = useUser();
 
     const [chatToDelete, setChatToDelete] = useState<{ id:string; title:string } | null>(null);
     const [chatToEdit, setChatToEdit] = useState<{ id:string; title:string } | null>(null);
@@ -245,18 +244,8 @@ export const Sidebar: React.FC = () => {
                 {hasMoreSessions && ' (scroll for more)'}
                 </p>
             </div>
-            {/* User section pinned to bottom */}
-            <div className={`mt-3 pt-3 border-t border-gray-700 flex items-center justify-between gap-3 ${bottomRowJustifyClass}`}>
-            <div className="flex flex-col min-w-0">
-                <span className={`text-xs font-medium truncate ${bottomTextHiddenClass}`}>
-                {user?.firstName || user?.username || 'User'}
-                </span>
-                <span className={`text-[10px] text-gray-500 ${bottomTextHiddenClass}`}>
-                Account & settings
-                </span>
-            </div>
-                <UserButton afterSignOutUrl="/" />
-            </div>
+                {/* Use the UserProfile component from App.tsx */}
+                <UserProfile />
             </div>
 
             {isSidebarOpen && (
