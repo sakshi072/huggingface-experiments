@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.57.1",
+    "@okta/okta-auth-js": "^7.14.1",
+    "@okta/okta-react": "^6.10.0",
     "@tailwindcss/vite": "^4.1.17",
     "axios": "^1.13.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-router-dom": "^7.10.1",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
