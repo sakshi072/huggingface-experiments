@@ -31,9 +31,9 @@ MONGO_POOL_CONFIG = {
     "minPoolSize": int(os.environ.get("MONGO_MIN_POOL_SIZE", "10")),
 
     # Connection Timeouts (milliseconds)
-    "connectionTimeoutMS": 10000, # 10 seconds to establish connection
-    "serverSelectionTimeoutMS": 5000, # 5 seconds to select server
-    "socketTimeoutMS": 45000, # 45 seconds for socket operations
+    "connecttimeoutms": 10000, # 10 seconds to establish connection
+    "serverselectiontimeoutms": 5000, # 5 seconds to select server
+    "sockettimeoutms": 45000, # 45 seconds for socket operations
 
     # Connection Lifecycel
     "maxIdleTimeMS": 300000, # 5 minutes - close idle connection

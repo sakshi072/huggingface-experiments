@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, ConfigDict
-from typing import List, Dict, Optional, Literal
+from typing import List, Dict, Optional, Literal, Any
 from datetime import datetime
 from bson import ObjectId
 
@@ -178,7 +178,7 @@ class CursorInfo(BaseModel):
 class HealthCheckResponse(BaseModel):
     """Health check response"""
     status: Literal["healthy", "unhealthy"]
-    database: Dict[str, any]
+    database: Dict[str, Any]
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     model_config = ConfigDict(

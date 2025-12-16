@@ -465,7 +465,6 @@ class MongoChatClient:
             
             last_message = messages[-1] if messages else None
             update_data = {
-                "message_count": {"$inc": len(messages)},
                 "updated_at": datetime.utcnow()
             }
 
