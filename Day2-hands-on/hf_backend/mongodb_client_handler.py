@@ -1,57 +1,150 @@
-from typing import List, Optional, Dict, Any
-from pymongo import MongoClient, DESCENDING
-from datetime import datetime  # Fixed: removed bson.objectid import
+from typing import List, Optional, Dict, Any, Tuple
+from pymongo import DESCENDING, ASCENDING
+from pymongo.errors import DuplicateKeyError
+from datetime import datetime 
+from bson import ObjectId
 import uuid
-from .config import MONGO_DB, logger
-from .models import HistoryMessage, ChatSessionMetadata
+import base64
+import json
 
-CHAT_COLLECTION_NAME = "chat-sessions"
+from .config import get_db, logger
+from .models import (
+    HistoryMessage, ChatSessionMetadata, 
+    MessageDocument, ChatMetadataDocument, 
+    CursorInfo 
+)
+
 CHAT_METADATA_COLLECTION = "chat-metadata"
+MESSAGES_COLLECTION = "messages"
+
+class CursorEncoder:
+    """
+    Encode/decode cursors for pagination
+    
+    Why?
+    - Hide internal implementation
+    - URL-safe
+    - Tamper-resistant
+    """
+    @staticmethod
+    def encode(field:str, value:Any, direction:str = "forward") -> str:
+        """Encode cursor to base64 string"""
+        cursor_data = {
+            "field":field,
+            "value":str(value) if not isinstance(value, str) else value,
+            "direction": direction
+        }
+        json_str = json.dumps(cursor_data)
+        return base64.urlsafe_b64encode(json_str.encode()).decode()
+
+    @staticmethod
+    def decode(cursor:str) -> CursorInfo:
+        """Decode cursor from base64 string"""
+        try:
+            json_str = base64.urlsafe_b64decode(cursor.encode()).decode()
+            data = json.loads(json_str)
+            return CursorInfo(**data)
+        except Exception as e:
+            logger.error(f"Failed to decode cursor: {e}")
+            raise ValueError("Invalid cursor")
+
 
 class MongoChatClient:
     """
-    Handles persistence and retrieval of chat history using MongoDB.
-    Now supports multi-user architecture with separate chat sessions.
-
-    Collections:
-    - chat-sessions: Stores actual messages for each chat
-    - chat-metadata: Stores metadata about each chat (title, timestamps, etc.)
+    Production-ready MongoDB client with cursor-based pagination
+    
+    MAJOR CHANGES FROM ORIGINAL:
+    1. Cursor-based pagination (not offset) for scalability
+    2. Messages stored in separate collection (16MB limit)
+    3. Optimized indexes for common queries
+    4. Better error handling
+    5. Soft delete support
+    6. Connection pool usage (via singleton)
     """
-    def __init__(self, db: Optional[Any]):
-        self.db = db
-        if self.db is not None:
-            self.collection = self.db[CHAT_COLLECTION_NAME]
+    def __init__(self):
+        """Initialize client = uses singleton connection pool"""
+        self.db = None
+        self.metadata_collection = None
+        self.messages_collection = None
+    
+    def _ensure_initialized(self):
+        """Lazy initialization - get DB when needed"""
+        if self.db is None:
+            self.db = get_db()
             self.metadata_collection = self.db[CHAT_METADATA_COLLECTION]
-
-            try:
-                self.metadata_collection.create_index(
-                    [("user_id", 1), ("updated_at", DESCENDING)]
-                )
-
-                self.metadata_collection.create_index("chat_id", unique=True)
-                self.collection.create_index("chat_id", unique=True)
-
-                logger.info(
-                    f"MongoDB collections ready: '{CHAT_COLLECTION_NAME}', "
-                    f"'{CHAT_METADATA_COLLECTION}' with indexes"
-                )
-            except Exception as e:
-                logger.warning(f"Could not create indexes (may already exist): {e}")
-        else:
-            self.collection = None
-            self.metadata_collection = None
-            logger.error("MongoDB is not initialized. History functions will be disabled.")
+            self.messages_collection = self.db[MESSAGES_COLLECTION]
+            self._ensure_indexes()
     
-    def _message_to_mongo(self, message: HistoryMessage) -> Dict[str, Any]:
-        """Converts Pydantic model to a MongoDB-friendly dictionary."""
-        message_dict = message.model_dump(exclude_none=True)
-        return message_dict
-    
-    def _message_from_mongo(self, message_dict: Dict[str, Any]) -> HistoryMessage:
-        """Converts a MongoDB document back to a HistoryMessage model."""
-        if '_id' in message_dict:
-            del message_dict['_id']
-        return HistoryMessage(**message_dict)
+    def _ensure_indexes(self):
+        """
+        Create optimized indexes for production
+        
+        INDEX STRATEGY:
+        1. Metadata collection: user queries, ownership verification
+        2. Messages collection: efficient message retrieval, pagination
+        """
+        try:
+            # === METADATA COLLECTION INDEXES ===
+            
+            # 1. User's sessions sorted by activity (most common query)
+            # Covers: get_user_chat_sessions with cursor pagination
+            self.metadata_collection.create_index(
+                [("user_id", ASCENDING), ("updated_at", DESCENDING), ("chat_id", ASCENDING)],
+                name="user_sessions_cursor_idx",
+                background=True
+            )
+            
+            # 2. Unique chat_id for fast lookup
+            self.metadata_collection.create_index(
+                "chat_id",
+                unique=True,
+                name="chat_id_unique_idx",
+                background=True
+            )
+            
+            # 3. User + chat_id for ownership verification (covered by #1)
+            # But explicit index for clarity and if we need different sort
+            self.metadata_collection.create_index(
+                [("user_id", ASCENDING), ("chat_id", ASCENDING)],
+                name="user_chat_ownership_idx",
+                background=True
+            )
+            
+            # 4. Exclude deleted chats from queries
+            self.metadata_collection.create_index(
+                [("deleted", ASCENDING), ("user_id", ASCENDING), ("updated_at", DESCENDING)],
+                name="active_sessions_idx",
+                background=True
+            )
+
+            # === MESSAGES COLLECTION INDEXES ===
+
+            # 1. Get messages for a chat (cursor pagination)
+            # Covers: get_history query with cursor
+            self.messages_collection.create_index(
+                [("chat_id", ASCENDING), ("squence", DESCENDING), ("message_id", ASCENDING)],
+                name="chat_messages_cursor_idx",
+                background=True
+            )
+
+            # 2. User's messages for analytics
+            self.messages_collection.create_index(
+                [("user_id", ASCENDING), ("timestamp", DESCENDING)],
+                name="user_messages_idx",
+                background=True
+            )
+
+            # 3. Unique message_id
+            self.messages_collection.create_index(
+                "message_id",
+                unique=True,
+                name="message_id_unique_idx",
+                background=True
+            )
+            logger.info("✅ Production indexes created/verified")
+            
+        except Exception as e:
+            logger.warning(f"Index creation warning: {e}")
 
     def create_chat_session(self, user_id: str, title: str = "New Chat") -> str:
         """
@@ -67,122 +160,110 @@ class MongoChatClient:
         Raises:
             Exception: If database operation fails
         """
-        if self.metadata_collection is None:
-            logger.error("Cannot create chat session - metadata collection not initialized")
-            return None
+        self._ensure_initialized()
 
         try: 
             chat_id = str(uuid.uuid4())
 
-            metadata = {
-                "chat_id": chat_id,
-                "user_id": user_id,
-                "title": title,
-                "created_at": datetime.utcnow(),  # Fixed typo: was "create_at"
-                "updated_at": datetime.utcnow(),
-                "message_count": 0
-            }
+            metadata = ChatMetadataDocument(  # FIXED: Use Pydantic model
+                chat_id=chat_id,
+                user_id=user_id,
+                title=title,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                message_count=0
+            )
 
-            self.metadata_collection.insert_one(metadata)
+            self.metadata_collection.insert_one(metadata.model_dump())
             logger.info(
                 f"Created new chat session: {chat_id[:8]}... "
                 f"for user: {user_id[:8]}... with title: '{title}'"
             )
             
             return chat_id
+        except DuplicateKeyError:
+            logger.error(f"Duplicate chat_id collision (rare): {chat_id}")
+            raise
         except Exception as e:
             logger.error(f"Error creating chat session: {e}", exc_info=True)
-            return None
+            return
     
-    def get_user_chat_sessions(self, user_id: str, limit: int = 10, offset: int = 0) -> List[ChatSessionMetadata]:
+    def get_user_chat_sessions(self, user_id: str, limit: int = 10, cursor: Optional[str] = None) -> Tuple[List[ChatSessionMetadata], Optional[str], bool]:
         """
-        Retrieves all chat sessions for a user, sorted by most recent activity.
+        CURSOR-BASED pagination for chat sessions
         
-        Args:
-            user_id: The user's unique identifier
-            
+        WHY CURSOR OVER OFFSET?
+        - Consistent results even when data changes
+        - No performance degradation with deep pagination
+        - Index-friendly (can seek directly to position)
+        
+        CURSOR FORMAT:
+        Base64-encoded JSON: {"field": "updated_at", "value": "2025-01-01T00:00:00", "direction": "forward"}
+        
         Returns:
-            List of ChatSessionMetadata objects, sorted by updated_at (newest first)
+            (sessions, next_cursor, has_more)
         """
-        if self.metadata_collection is None:
-            logger.warning("Cannot get chat sessions - metadata collection not initialized")
-            return []
+        self._ensure_initialized()
 
         try:
+
+            # Build query 
+            query = {
+                "user_id": user_id,
+                "deleted": False
+            }
+
+            # Apply cursor if provided
+            if cursor: 
+                cursor_info = CursorEncoder.decode(cursor)
+
+                # Convert cursor value based of field type
+                if cursor_info.field == "updated_at":
+                    cursor_value = datetime.fromisoformat(cursor_info.value)
+                    # For descending sort, we want LESS than cursor value
+                    query["updated_at"] = {"$lt": cursor_value}
+                elif cursor_info.field == "chat_id":
+                    query["chat_id"] = {"$gt": cursor_info.value}
+
+            # Execute query with limit + 1 (to check if more exist)
+            # Sort by updated_at DESC (most recent first)
             sessions = list(
-                self.metadata_collection.find(
-                    {"user_id": user_id},
-                    {"_id": 0}
-                )
-                .sort("updated_at", DESCENDING)
-                .skip(offset)
-                .limit(limit)
+                self.metadata_collection
+                .find(query)
+                .sort([("updated_at", DESCENDING), ("chat_id", ASCENDING)])
+                .limit(limit + 1)
             )
 
-            logger.info(
-                f"Retrieved {len(sessions)} chat sessions for user: {user_id[:8]}... "
-                f"(limit={limit}, offset={offset})"
-            )
-            return [ChatSessionMetadata(**session) for session in sessions]
+            # Check if more results exist
+            has_more = len(sessions) > limit
+            if has_more:
+                sessions = sessions[:limit]
+
+            # Generate next cursor
+            next_cursor = None
+            if has_more and sessions:
+                last_session = sessions[-1]
+                next_cursor = CursorEncoder.encode(
+                    field="updated_at",
+                    value=last_session["updated_at"].isoformat(),
+                    direction="forward"
+                )
+            
+            # Convert to Pydantic models
+
+            session_models = [
+                ChatSessionMetadata(**self._clean_mongo_doc(session)) for session in sessions
+            ]
+
+            logger.info(f"Retrieved {len(session_models)} sessions for user {user_id[:8]}...")
+            return session_models, next_cursor, has_more
 
         except Exception as e:
             logger.error(
                 f"Error retrieving chat sessions for user {user_id[:8]}...: {e}", 
                 exc_info=True
             )
-            return []
-
-    def update_chat_metadata(self, chat_id: str, user_id: str):
-        """
-        Updates the timestamp and increments message count for a chat.
-        Called after each successful message exchange.
-        
-        Args:
-            chat_id: The chat session ID
-            user_id: The user's unique identifier (for verification)
-        """
-        if self.metadata_collection is None:
-            logger.warning("Cannot update metadata - collection not initialized")
-            return
-        
-        try:
-            result = self.metadata_collection.update_one(
-                {"chat_id": chat_id, "user_id": user_id},
-                {
-                    "$set": {"updated_at": datetime.utcnow()},
-                    "$inc": {"message_count": 2}
-                }
-            )
-
-            if result.modified_count > 0:
-                logger.debug(f"Updated metadata for chat {chat_id[:8]}...")
-            else:
-                logger.warning(
-                    f"No metadata updated for chat {chat_id[:8]}... "
-                    "(may not exist or user mismatch)"
-                )
-        except Exception as e:
-            logger.error(f"Error updating chat metadata for {chat_id[:8]}...: {e}")
-
-    def reset_message_count(self, chat_id: str, user_id: str):
-        """
-        Resets the message count to 0 for a chat (used when clearing history).
-        
-        Args:
-            chat_id: The chat session ID
-            user_id: The user's unique identifier (for verification)
-        """
-        if self.metadata_collection is None:
-            return
-        
-        try:
-            self.metadata_collection.update_one(
-                {"chat_id": chat_id, "user_id": user_id},
-                {"$set": {"message_count": 0}}
-            )
-            logger.debug(f"Reset message count for chat {chat_id[:8]}...")
-        except Exception as e:
-            logger.error(f"Error resetting message count: {e}")
+            return [], None, False
 
     def update_chat_title(self, chat_id: str, user_id: str, title: str):
         """
@@ -193,14 +274,12 @@ class MongoChatClient:
             user_id: The user's unique identifier (for verification)
             title: The new title for the chat
         """
-        if self.metadata_collection is None:
-            logger.warning("Cannot update title - metadata collection not initialized")
-            return
+        self._ensure_initialized()
 
         try:
             result = self.metadata_collection.update_one(
-                {"chat_id": chat_id, "user_id": user_id},
-                {"$set": {"title": title}}
+                {"chat_id": chat_id, "user_id": user_id, "deleted": False},
+                {"$set": {"title": title, "updated_at": datetime.utcnow()}}
             )
 
             if result.modified_count > 0:
@@ -213,165 +292,235 @@ class MongoChatClient:
                 
         except Exception as e:
             logger.error(f"Error updating chat title: {e}", exc_info=True)
+            raise
 
     def delete_chat_session(self, chat_id: str, user_id: str):
         """
-        Deletes a chat session and all its messages.
+        Soft delete chat session
         
-        Args:
-            chat_id: The chat session ID to delete
-            user_id: The user's unique identifier (for verification)
+        WHY SOFT DELETE?
+        - Can recover accidentally deleted chats
+        - Maintain data for analytics
+        - Faster than hard delete (no cascade needed)
+        
+        Trade-off: Takes up storage space
         """
-        if self.collection is None or self.metadata_collection is None:
-            logger.warning("Cannot delete chat - collections not initialized")
-            return
+        self._ensure_initialized()
 
         try:
-            msg_result = self.collection.delete_one({"chat_id": chat_id})
-            meta_result = self.metadata_collection.delete_one({
-                "chat_id": chat_id,
-                "user_id": user_id
-            })
+            # Soft delete metadata
+            result = self.metadata_collection.update_one(
+                {"chat_id": chat_id, "user_id": user_id},
+                {
+                    "$set":{
+                        "deleted": True,
+                        "deleted_at": datetime.utcnow()
+                    }
+                }
+            )
 
-            if meta_result.deleted_count > 0:
-                logger.info(
-                    f"Deleted chat session {chat_id[:8]}... for user {user_id[:8]}... "
-                    f"(messages: {msg_result.deleted_count}, metadata: {meta_result.deleted_count})"
-                )
+            if result.modified_count > 0:
+                logger.info(f"Soft deleted chat: {chat_id[:8]}...")
             else:
-                logger.warning(
-                    f"No chat session found to delete: {chat_id[:8]}... "
-                    f"for user {user_id[:8]}..."
-                )
+                logger.warning(f"No chat found to delete: {chat_id[:8]}...")
                 
         except Exception as e:
             logger.error(f"Error deleting chat session: {e}", exc_info=True)
+            raise
     
     def verify_chat_ownership(self, chat_id: str, user_id: str) -> bool:
         """
-        Verifies that a chat belongs to a specific user.
+        Verify user owns the chat
         
-        Args:
-            chat_id: The chat session ID
-            user_id: The user's unique identifier
+        Uses index: user_chat_ownership_idx
             
         Returns:
             True if the user owns this chat, False otherwise
         """
-        if self.metadata_collection is None:
-            logger.warning("Cannot verify ownership - metadata collection not initialized")
-            return False
+        self._ensure_initialized()
         
         try:
             result = self.metadata_collection.find_one({
                 "chat_id": chat_id,
-                "user_id": user_id
-            })
-
-            is_owner = result is not None
+                "user_id": user_id,
+                "deleted": False
+            }, {"_id": 1})
             
-            if not is_owner:
-                logger.warning(
-                    f"Ownership verification failed: chat {chat_id[:8]}... "
-                    f"does not belong to user {user_id[:8]}..."
-                )
-            
-            return is_owner
+            return result is not None
         
         except Exception as e:
             logger.error(f"Error verifying chat ownership: {e}", exc_info=True)
             return False
 
-    def get_history(self, chat_id: str, limit: int = 10, offset: int = 0) -> List[HistoryMessage]:
+    def get_history(self, chat_id: str, limit: int = 20, cursor: Optional[str] = None) -> Tuple[List[HistoryMessage], Optional[str], bool]:
         """
         Retrieves message history for a given chat ID with pagination.
         
         Messages are stored in MongoDB as: [oldest, ..., newest]
         This function returns them in the same order: oldest to newest
         
-        Pagination works from the END (newest messages):
-        - offset=0, limit=2 -> last 2 messages (newest)
-        - offset=2, limit=2 -> skip last 2, get next 2 (older messages)
-        
-        Args:
-            chat_id: The chat session ID
-            limit: Maximum number of messages to return
-            offset: Number of messages to skip from the END (newest)
+        CURSOR-BASED pagination for message history
         
         Returns:
-            List of HistoryMessage objects (oldest to newest in the returned slice)
+            (messages, next_cursor, has_more)
         """
-        if self.collection is None:
-            logger.warning("MongoDB collection not available")
-            return []
+        self._ensure_initialized()
 
         try:
-            document = self.collection.find_one({'chat_id': chat_id})
+            query = {"chat_id": chat_id}
 
-            if not document or 'messages' not in document:
-                return []
+            # Apply cursor
+            if cursor:
+                cursor_info = CursorEncoder.decode(cursor)
+                # Sequence is int
+                sequence_value = int(cursor_info.value)
+                # For descending, we want LESS than cursor
+                query["sequence"] = {"$lt": sequence_value}
+
+            # Query with limit + 1
+            messages = list(
+                self.messages_collection
+                .find(query)
+                .sort([("sequence", DESCENDING)])
+                .limit(limit+1)
+            )
+
+            has_more = len(messages) > limit
+            if has_more:
+                messages = messages[:limit]
             
-            all_messages = document['messages']
-            total_count = len(all_messages)
-            
-            end_index = total_count - offset
-            start_index = max(0, end_index - limit)
-            
-            if start_index >= total_count or end_index <= 0:
-                return []
-            
-            sliced_messages = all_messages[start_index:end_index]
-            history = [self._message_from_mongo(msg) for msg in sliced_messages]
-            
-            return history
+            # Generate next cursor
+            next_cursor = None
+            if has_more and messages:
+                last_msg = messages[-1]
+                next_cursor = CursorEncoder.encode(
+                    field="sequence",
+                    value=str(last_msg["sequence"]),
+                    direction="forward"
+                )
+
+            # Convert to HistoyMessage
+            history = [
+                HistoryMessage(
+                    session_id=msg["chat_id"],
+                    role=msg["role"],
+                    content = msg["content"],
+                    timestamp=msg["timestamp"]
+                )
+                for msg in messages
+            ]
+
+            history.reverse()
+
+            return history, next_cursor, has_more
         
         except Exception as e:
             logger.error(f"MongoDB Error retrieving history for {chat_id}: {e}", exc_info=True)
-            return []
+            return [], None, False
     
-    def save_messages(self, chat_id: str, messages: List[HistoryMessage]):
-        """Appends new messages to the chat history document."""
-        if self.collection is None:
-            return 
+    def save_messages(self, chat_id: str, user_id:str, messages: List[HistoryMessage]):
+        """
+        Save messages to separate collection
+        
+        MAJOR CHANGE: Messages now in separate collection, not embedded array
+        
+        WHY?
+        - Avoid 16MB document limit
+        - Better pagination performance
+        - Can index message content for search
+        
+        Trade-off: More documents, need to manage references
+        """
+        self._ensure_initialized() 
 
         try: 
-            mongo_messages = [self._message_to_mongo(msg) for msg in messages]
-            result = self.collection.update_one(
+            metadata = self.metadata_collection.find_one(
                 {"chat_id": chat_id},
-                {"$push": {"messages": {"$each": mongo_messages}}},
-                upsert=True
+                {"message_count": 1}
             )
 
-            if result.upserted_id:
-                logger.info(f"Created new chat document: {chat_id[:8]}...")
-            else:
-                logger.debug(f"Appended {len(messages)} messages to chat: {chat_id[:8]}...")
+            if not metadata:
+                logger.error(f"Chat not found: {chat_id}")
+                return
 
+            start_sequence = metadata.get("message_count", 0)
+
+            messages_doc = []
+
+            for idx, msg in enumerate(messages):
+                doc = MessageDocument(
+                    message_id = str(ObjectId()),
+                    chat_id = chat_id,
+                    user_id = user_id,
+                    role = msg.role,
+                    content = msg.content,
+                    timestamp = msg.timestamp,
+                    sequence = start_sequence + idx
+                )
+                messages_doc.append(doc.model_dump())
+            
+            # Insert messages
+            if messages_doc:
+                self.messages_collection.insert_many(messages_doc)
+            
+            last_message = messages[-1] if messages else None
+            update_data = {
+                "message_count": {"$inc": len(messages)},
+                "updated_at": datetime.utcnow()
+            }
+
+            if last_message:
+                update_data["last_message_at"] = last_message.timestamp
+                update_data["last_message_preview"] = last_message.content[:100]
+
+            self.metadata_collection.update_one(
+                {"chat_id":chat_id},
+                {"$inc" : {"message_count": len(messages)}, "$set":update_data}
+            )
+
+            logger.debug(f"Saved {len(messages)} messages to chat {chat_id[:8]}...")
+            
         except Exception as e:
-            logger.error(f"MongoDB Error saving messages for {chat_id}: {e}")
+            logger.error(f"Error saving messages: {e}", exc_info=True)
+            raise
     
     def clear_history(self, chat_id: str):
-        """Removes the entire chat document from the collection."""
-        if self.collection is None:
-            return 
+        """
+        Clear all messages for a chat
+        
+        Now deletes from messages collection
+        """
+        self._ensure_initialized()
 
         try:
-            result = self.collection.delete_one({"chat_id": chat_id})
-            if result.deleted_count > 0:
-                logger.info(f"Successfully deleted chat history for: {chat_id[:8]}...")
-            else:
-                logger.warning(f"No chat history found to delete for: {chat_id[:8]}...")
+            # Delete messages
+            result = self.messages_collection.delete_many({"chat_id": chat_id})
+
+            # Reset metadata
+            self.metadata_collection.update_one(
+                {"chat_id":chat_id},
+                {
+                    "$set":{
+                        "message_count":0,
+                        "last_message_at": None,
+                        "last_message_preview": None,
+                        "updated_at": datetime.utcnow()
+                    }
+                }
+            )
+            logger.info(f"Cleared {result.deleted_count} messages from chat {chat_id[:8]}...")
+
         except Exception as e:
             logger.error(f"MongoDB Error clearing history for {chat_id}: {e}")
+            raise
         
     def get_chat_statistics(self, user_id: str) -> Dict[str, Any]:
-        """Get statistics about a user's chats (optional utility method)."""
-        if self.metadata_collection is None:
-            return {}
-
+        """Get user's chat statistics"""
+        self._ensure_initialized()
+        
         try:
             pipeline = [
-                {"$match": {"user_id": user_id}},
+                {"$match": {"user_id": user_id, "deleted": False}},
                 {"$group": {
                     "_id": None,
                     "total_chats": {"$sum": 1},
@@ -387,17 +536,16 @@ class MongoChatClient:
                 stats = result[0]
                 del stats['_id']
                 return stats
-            else:
-                return {
-                    "total_chats": 0,
-                    "total_messages": 0,
-                    "oldest_chat": None,
-                    "newest_chat": None
-                }
-                
+            
+            return {
+                "total_chats": 0,
+                "total_messages": 0,
+                "oldest_chat": None,
+                "newest_chat": None
+            }
+            
         except Exception as e:
-            logger.error(f"Error getting chat statistics: {e}")
+            logger.error(f"Error getting statistics: {e}")
             return {}
 
-
-MONGO_CHAT_CLIENT = MongoChatClient(MONGO_DB)
+MONGO_CHAT_CLIENT = MongoChatClient()
