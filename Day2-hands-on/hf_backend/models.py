@@ -228,7 +228,7 @@ class ChatMetadataDocument(BaseModel):
     chat_id: str
     user_id: str
     title: str
-    create_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     message_count: int = 0
 

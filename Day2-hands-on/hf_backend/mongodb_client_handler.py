@@ -547,4 +547,11 @@ class MongoChatClient:
             logger.error(f"Error getting statistics: {e}")
             return {}
 
+    @staticmethod
+    def _clean_mongo_doc(doc: Dict) -> Dict:
+        """Remove MongoDB _id field"""
+        if '_id' in doc:
+            del doc['_id']
+        return doc
+
 MONGO_CHAT_CLIENT = MongoChatClient()
