@@ -20,20 +20,42 @@ export const chatService = {
     },
 
     /**
-     * GET /chat/history - Retrieves the chat history for a specific chat.
+     * GET /chat/history - Retrieves chat history with CURSOR pagination
+     * 
+     * NEW: Uses cursor instead of offset
+     * 
+     * @param chatId - The chat session ID
+     * @param limit - Number of messages to fetch
+     * @param cursor - Pagination cursor (null for first page)
+     * @returns History messages, next cursor, and has_more flag
      */
-    async getHistory(chatId: string, limit: number, offset: number): Promise<HistoryMessage[]> {
-        if (!chatId) return [];
+    async getHistory(
+        chatId: string, 
+        limit: number, 
+        cursor: string | null = null
+    ): Promise<HistoryResponse> {
+        if (!chatId) {
+            return {
+                history:[],
+                next_cursor:null,
+                has_more:false
+            }
+        }
+
+        const params: any = {
+            chat_id:chatId,
+            limit:limit
+        }
+
+        if (cursor) {
+            params.cursor = cursor;
+        }
 
         const response = await apiClient.get<HistoryResponse>('/chat/history', {
-            params: {
-                chat_id: chatId,
-                limit: limit,
-                offset: offset
-            },
+            params
         });
         
-        return response.data.history;
+        return response.data;
     },
 
     /**

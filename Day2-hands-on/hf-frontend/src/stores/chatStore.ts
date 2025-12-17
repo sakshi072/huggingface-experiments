@@ -14,9 +14,13 @@ interface ChatState {
   isPaginating: boolean;
   hasMore: boolean;
 
+  // CHANGED: Cursor-based pagination for sessions
   hasMoreSessions: boolean;
-  sessionOffset: number;
+  sessionsCursor: string | null;  // CHANGED: from sessionOffset to cursor
   isLoadingSessions: boolean;
+
+  // CHANGED: Cursor-based pagination for messages
+  messagesCursor: string | null;  // NEW: Track current cursor for messages
   
   // Pagination tracking
   messagesLoadedFromHistory: number;
@@ -34,11 +38,14 @@ interface ChatState {
   setChatSessions: (sessions: ChatSessionMetadata[]) => void;
   appendChatSessions: (sessions: ChatSessionMetadata[]) => void;
   
+  // CHANGED: Cursor-based methods
   setHasMoreSessions: (hasMore: boolean) => void;
-  setSessionsOffset: (offset: number) => void;
-  incrementSessionsOffset: (count: number) => void;
+  setSessionsCursor: (cursor: string | null) => void;  // CHANGED
   setIsLoadingSessions: (loading: boolean) => void;
   resetSessionsPagination: () => void;
+
+  // NEW: Message cursor methods
+  setMessagesCursor: (cursor: string | null) => void;
 
   setIsLoading: (loading: boolean) => void;
   setIsPaginating: (paginating: boolean) => void;
@@ -70,9 +77,13 @@ export const useChatStore = create<ChatState>()(
         isPaginating: false,
         hasMore: false,
 
+        // CHANGED: Cursor instead of offset
         hasMoreSessions: false,
-        sessionOffset: 0,
+        sessionsCursor: null,  // CHANGED
         isLoadingSessions: false,
+
+        // NEW: Message cursor
+        messagesCursor: null,
         
         messagesLoadedFromHistory: 0,
         messagesSentInSession: 0,
@@ -104,20 +115,19 @@ export const useChatStore = create<ChatState>()(
         
         setCurrentChatId: (chatId) => set({ currentChatId: chatId }),
         
-        // FIX: Set offset when setting sessions
+        // CHANGED: Set cursor to null when setting initial sessions
         setChatSessions: (sessions) => set({ 
           chatSessions: sessions,
-          sessionOffset: sessions.length  // Track how many we've loaded
+          sessionsCursor: null  // Reset cursor
         }),
 
         appendChatSessions: (sessions) => set((state) => {
-            const existingIds = new Set(state.chatSessions.map(s=>s.chat_id));
-            const newSessions = sessions.filter(s => !existingIds.has(s.chat_id))
+          const existingIds = new Set(state.chatSessions.map(s => s.chat_id));
+          const newSessions = sessions.filter(s => !existingIds.has(s.chat_id));
 
-            return {
-                chatSessions: [...state.chatSessions, ...newSessions]
-            }
-
+          return {
+            chatSessions: [...state.chatSessions, ...newSessions]
+          };
         }),
         
         setIsLoading: (loading) => set({ isLoading: loading }),
@@ -126,20 +136,21 @@ export const useChatStore = create<ChatState>()(
         
         setHasMore: (hasMore) => set({ hasMore: hasMore }),
 
-        setHasMoreSessions: (hasMore) => set({hasMoreSessions: hasMore}),
+        setHasMoreSessions: (hasMore) => set({ hasMoreSessions: hasMore }),
 
-        setSessionsOffset: (session) => set({sessionOffset:session}),
+        // CHANGED: Set cursor instead of offset
+        setSessionsCursor: (cursor) => set({ sessionsCursor: cursor }),
         
-        incrementSessionsOffset: (count) => set((state) => ({
-            sessionOffset: state.sessionOffset + count
-        })),
+        setIsLoadingSessions: (loadingSession) => set({ isLoadingSessions: loadingSession }),
         
-        setIsLoadingSessions:(loadingSession) => set({isLoadingSessions: loadingSession}),
-        
+        // CHANGED: Reset cursor
         resetSessionsPagination: () => set({
-            sessionOffset: 0,
-            hasMoreSessions: false
+          sessionsCursor: null,
+          hasMoreSessions: false
         }),
+
+        // NEW: Message cursor methods
+        setMessagesCursor: (cursor) => set({ messagesCursor: cursor }),
         
         incrementMessagesLoaded: (count) => set((state) => ({
           messagesLoadedFromHistory: state.messagesLoadedFromHistory + count
@@ -169,6 +180,7 @@ export const useChatStore = create<ChatState>()(
         resetMessages: () => set({
           messages: [],
           hasMore: false,
+          messagesCursor: null,  // NEW: Reset cursor
           messagesLoadedFromHistory: 0,
           messagesSentInSession: 0,
         }),
@@ -180,7 +192,8 @@ export const useChatStore = create<ChatState>()(
           isLoading: false,
           isPaginating: false,
           hasMore: false,
-          sessionOffset: 0,
+          sessionsCursor: null,  // CHANGED
+          messagesCursor: null,  // NEW
           hasMoreSessions: false,
           isLoadingSessions: false,
           messagesLoadedFromHistory: 0,
@@ -193,7 +206,7 @@ export const useChatStore = create<ChatState>()(
         // Only persist certain fields
         partialize: (state) => ({
           currentChatId: state.currentChatId,
-          chatsTitled: Array.from(state.chatsTitled), // Convert Set to Array for storage
+          chatsTitled: Array.from(state.chatsTitled),
         }),
         // Hydrate Set from Array
         onRehydrateStorage: () => (state) => {

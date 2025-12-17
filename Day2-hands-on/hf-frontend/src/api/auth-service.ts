@@ -7,11 +7,20 @@ export interface ChatSessionMetadata {
     created_at: string;
     updated_at: string;
     message_count: number;
+    last_message_preview?:string;
+
 }
 
 export interface CreateChatResponse {
     chat_id:string;
     title:string;
+}
+
+export interface ChatSessionResponse {
+    sessions: ChatSessionMetadata[]
+    next_cursor: string | null;
+    has_more: boolean;
+    total_count?: number;
 }
 
 
@@ -28,20 +37,29 @@ export const authChatService = {
     },
 
     /**
-     * GET /chat/sessions - Get all chat sessions for a user
+     * GET /chat/sessions - Get chat sessions with CURSOR pagination
+     * 
+     * NEW: Uses cursor instead of offset
+     * 
+     * @param limit - Number of sessions to fetch (default: 20)
+     * @param cursor - Pagination cursor (null for first page)
+     * @returns Sessions, next cursor, and has_more flag
      */
-
-    async getChatSession(limit: number = 10, offset: number = 0): Promise<ChatSessionMetadata[]>{
-        const response = await apiClient.get<{ sessions: ChatSessionMetadata[]}>(
+    async getChatSession(
+        limit: number = 10, 
+        cursor: string | null = null
+    ): Promise<ChatSessionResponse>{
+        const params: any = { limit }
+        if (cursor){
+            params.cursor = cursor;
+        }
+        const response = await apiClient.get<ChatSessionResponse>(
             '/chat/sessions',
             {
-                params:{
-                    limit: limit,
-                    offset:offset
-                }
+                params
             }
         );
-        return response.data.sessions;
+        return response.data;
     },
 
     /**

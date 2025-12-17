@@ -1,14 +1,13 @@
 import { useEffect, useCallback, useRef } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import type { HistoryMessage } from "../types/chat-types";
 import { chatService } from "../api/chat-service";
 import { authChatService } from "../api/auth-service";
 import { smartTitleService } from "../api/smart-title-service";
 import { useChatStore } from "../stores/chatStore";
 import { useAuthStore } from "../stores/authStore";
 
-const PAGE_SIZE = 10;
-const SESSIONS_PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
+const SESSIONS_PAGE_SIZE = 20;
 
 // GLOBAL singleton to prevent multiple simultaneous initializations
 let globalInitPromise: Promise<void> | null = null;
@@ -25,7 +24,8 @@ export const useChat = () => {
         isPaginating,
         hasMore,
         hasMoreSessions,
-        sessionOffset,
+        sessionsCursor,
+        messagesCursor,
         isLoadingSessions,
         messagesLoadedFromHistory,
         messagesSentInSession,
@@ -39,7 +39,8 @@ export const useChat = () => {
         setIsPaginating,
         setHasMore,
         setHasMoreSessions,
-        incrementSessionsOffset,
+        setSessionsCursor,
+        setMessagesCursor,
         setIsLoadingSessions,
         resetSessionsPagination,
         incrementMessagesLoaded,
@@ -126,14 +127,15 @@ export const useChat = () => {
 
     const initializeChats = async () => {
         try {
-            const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
+            const response = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, null);
             
-            const sortedSessions = sessions.sort((a, b) => 
+            const sortedSessions = response.sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
             
             setChatSessions(sortedSessions);
-            setHasMoreSessions(sessions.length === SESSIONS_PAGE_SIZE);
+            setHasMoreSessions(response.has_more);
+            setSessionsCursor(response.next_cursor);
 
             // Mark titled sessions
             sortedSessions.forEach(session => {
@@ -161,8 +163,10 @@ export const useChat = () => {
                 
                 // Refresh from server
                 setTimeout(async () => {
-                    const updated = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
-                    setChatSessions(updated);
+                    const updated = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, null);
+                    setChatSessions(updated.sessions);
+                    setHasMoreSessions(updated.has_more);
+                    setSessionsCursor(updated.next_cursor);
                 }, 300);
             }
         } catch (error) {
@@ -173,53 +177,51 @@ export const useChat = () => {
 
     const loadChatSessions = async () => {
         try {
-            const sessions = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
-            setChatSessions(sessions.sort((a, b) => 
+            const response = await authChatService.getChatSession(SESSIONS_PAGE_SIZE, 0);
+            setChatSessions(response.sessions.sort((a, b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             ));
-            setHasMoreSessions(sessions.length === SESSIONS_PAGE_SIZE);
+            setHasMoreSessions(response.has_more);
+            setSessionsCursor(response.next_cursor);
         } catch (error) {
             console.error("Failed to load chat sessions:", error);
         }
     };
 
     const loadMoreSessions = useCallback(async () => {
-        if (isLoadingSessions || !hasMoreSessions) {
+        if (isLoadingSessions || !hasMoreSessions || ! sessionsCursor) {
             return;
         }
 
-        console.log('Loading more sessions, offset:', sessionOffset);
+        console.log('[useChat] Loading more sessions with cursor:', sessionsCursor);
         setIsLoadingSessions(true);
 
         try {
-            const sessions = await authChatService.getChatSession(
+            const response = await authChatService.getChatSession(
                 SESSIONS_PAGE_SIZE,
-                sessionOffset
+                sessionsCursor
             );
 
-            console.log('Loaded sessions:', sessions.length);
+            console.log('Loaded sessions:', response.sessions.length);
 
-            if (sessions.length === 0) {
+            if (response.sessions.length === 0) {
                 setHasMoreSessions(false);
                 return;
             }
 
-            const sortedSession = sessions.sort((a,b) => 
+            const sortedSession = response.sessions.sort((a,b) => 
                 new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
             );
 
             appendChatSessions(sortedSession);
-            incrementSessionsOffset(sortedSession.length);
+            setSessionsCursor(response.next_cursor);  
+            setHasMoreSessions(response.has_more);
 
             sortedSession.forEach(session => {
                 if(session.title !== 'New Chat') {
                     markChatAsTitled(session.chat_id)
                 }
             });
-
-            if(sessions.length < SESSIONS_PAGE_SIZE){
-                setHasMoreSessions(false);
-            }
         } catch (error) {
             console.error("Failed to load more sessions:", error);
         } finally {
@@ -227,11 +229,11 @@ export const useChat = () => {
         }
 
     }, [
-        sessionOffset, 
+        sessionsCursor, 
         isLoadingSessions, 
         hasMoreSessions,
         appendChatSessions,
-        incrementSessionsOffset,
+        setSessionsCursor,
         markChatAsTitled,
         setHasMoreSessions,
         setIsLoadingSessions
@@ -243,19 +245,19 @@ export const useChat = () => {
         setIsPaginating(true);
 
         try {
-            const offset = messagesLoadedFromHistory + messagesSentInSession;
-            const history: HistoryMessage[] = await chatService.getHistory(
+            
+            const response = await chatService.getHistory(
                 currentChatId,
                 PAGE_SIZE,
-                offset
+                messagesCursor
             );
 
-            if (history.length === 0) {
+            if (response.history.length === 0) {
                 setHasMore(false);
                 return;
             }
 
-            const clientMessages = history.map(msg => ({
+            const clientMessages = response.history.map(msg => ({
                 ...msg,
                 status: 'sent' as const,
             }));
@@ -271,15 +273,26 @@ export const useChat = () => {
             incrementMessagesLoaded(newUniqueMessages.length);
             setMessages([...newUniqueMessages, ...messages]);
 
-            if (history.length < PAGE_SIZE) {
-                setHasMore(false);
-            }
+            setMessagesCursor(response.next_cursor);
+            setHasMore(response.has_more);
         } catch (error) {
             console.error("Failed to load history:", error);
         } finally {
             setIsPaginating(false);
         }
-    }, [currentChatId, hasMore, chatIsLoading, isPaginating]);
+    }, [
+        currentChatId, 
+        hasMore, 
+        chatIsLoading, 
+        isPaginating,
+        messagesCursor,
+        messages,
+        incrementMessagesLoaded,
+        setMessages,
+        setMessagesCursor,
+        setHasMore,
+        setIsPaginating
+    ]);
 
     // Load initial history when chat changes
     useEffect(() => {
@@ -291,15 +304,15 @@ export const useChat = () => {
         const loadInitial = async () => {
             setIsLoading(true);
             try {
-                const history: HistoryMessage[] = await chatService.getHistory(
+                const response = await chatService.getHistory(
                     currentChatId,
                     PAGE_SIZE,
-                    0
+                    null
                 );
 
-                if (history.length === 0) return;
+                if (response.history.length === 0) return;
 
-                const clientMessages = history.map(msg => ({
+                const clientMessages = response.history.map(msg => ({
                     ...msg,
                     status: 'sent' as const,
                 }));
@@ -307,9 +320,8 @@ export const useChat = () => {
                 setMessages(clientMessages);
                 incrementMessagesLoaded(clientMessages.length);
 
-                if (history.length >= PAGE_SIZE) {
-                    setHasMore(true);
-                }
+                setMessagesCursor(response.next_cursor);
+                setHasMore(response.has_more);
             } catch (error: any) {
                 console.error("Failed to load initial history:", error);
                 
