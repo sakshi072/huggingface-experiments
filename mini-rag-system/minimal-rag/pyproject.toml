@@ -1,0 +1,39 @@
+# pyproject.toml - Minimal RAG System (Phase 1)
+[tool.poetry]
+name = "mini-rag"
+version = "0.1.0"
+description = "Minimal RAG system - learning step by step"
+authors = ["Your Name <you@example.com>"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+# Core - Only what we need right now
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+
+# Document parsing - Start with just text files
+pypdf = "^3.17.0"
+
+# Text processing
+langchain-text-splitters = "^0.0.1"
+tiktoken = ">=0.8.0"
+
+# Vector database - Local, no Docker needed yet
+chromadb = "^0.4.22"
+
+numpy = "<2.0.0"
+
+# Embeddings & LLM - HuggingFace free API
+sentence-transformers = "^2.3.0"
+requests = "^2.31.0"
+
+huggingface-hub = "^0.20.0"
+
+# Utilities
+python-dotenv = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
