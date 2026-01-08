@@ -15,6 +15,7 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from llm_service import LLMService
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 50
@@ -53,7 +54,15 @@ class MinimalRAG:
             chunk_overlap = CHUNK_OVERLAP,
             separators = ["\n\n","\n", ". ", " ", ""]
         )
-        print("Initialization completed!\n")
+
+        print("   Initializing LLM service...")
+        try:
+            self.llm = LLMService(model_name="llama")
+            print("   ✓ LLM ready!")
+        except ValueError as e:
+            print(f"{e}")
+        
+        print("✅ Initialization complete!\n")
 
     def ingest_file(self, filepath:str) -> int:
         """
@@ -128,19 +137,17 @@ class MinimalRAG:
         metadatas = results['metadatas'][0]
         distances = results['distances'][0]
 
-        print(f"   Found {len(chunks)} relevant chunks\n")
+        print(f"   Retrieved {len(chunks)} relevant chunks")
 
-        # 4. Build content and simple answer
-        context = "\n\n".join(chunks)
+        if not chunks:
+            return {
+                "answer": "I cannot find relevant information to answer your question.",
+                "context": "",
+                "sources": []
+            }
 
-        # For now, just return the most relevant chunk as "answer"
-        # We'll add LLM generation in Phase 2
-        answer = f"Based on the documents, here's what I found:\n\n{chunks[0][:500]}..."
-        
-        return {
-            "answer": answer,
-            "context": context,
-            "sources": [
+        # Prepare context chunks for LLM
+        context_chunks = [
                 {
                     "chunk": chunk,
                     "source": meta["source"],
@@ -149,12 +156,29 @@ class MinimalRAG:
                 }
                 for chunk, meta, dist in zip(chunks, metadatas, distances)
             ]
+
+        # 5. Generate answer
+        print("   Generating answer with LLM...")
+        answer = self.llm.generate(
+            query=question,
+            context_chunks=context_chunks,
+            max_tokens=100,
+            temperature=0.1
+        )
+
+        # 6. Build content and simple answer
+        context = "\n\n".join(chunks)
+        
+        return {
+            "answer": answer,
+            "context": context,
+            "sources": context_chunks,
         }
 
     def get_stats(self) -> dict:
         count = self.collection
         return {
-            "total_chunks":count,
+            "total_chunks":self.collection.count(),
             "collection": "documents"
         }
 
@@ -168,44 +192,64 @@ def main():
             f.write("""
             Introduction to Machine Learning
 
+Introduction to Machine Learning
+
 Machine learning is a subset of artificial intelligence (AI) that enables 
 systems to learn and improve from experience without being explicitly programmed.
+It focuses on developing computer programs that can access data and use it to 
+learn for themselves.
 
 Key Concepts:
 
 1. Supervised Learning
 Supervised learning uses labeled training data. The algorithm learns from 
 input-output pairs to predict outputs for new inputs. Common applications 
-include image classification and spam detection.
+include image classification, spam detection, and price prediction.
 
 2. Unsupervised Learning
 Unsupervised learning works with unlabeled data. The algorithm finds hidden 
-patterns and structures in the data. Clustering and dimensionality reduction 
-are typical use cases.
+patterns and structures in the data without predefined categories. Clustering 
+and dimensionality reduction are typical use cases.
 
 3. Neural Networks
 Neural networks are computing systems inspired by biological neural networks. 
 They consist of layers of interconnected nodes (neurons) that process information 
-and learn patterns from data.
+and learn patterns from data. Each connection has a weight that adjusts during 
+training.
 
 4. Deep Learning
 Deep learning is a subset of machine learning that uses neural networks with 
 multiple layers (deep neural networks). It excels at processing unstructured 
-data like images, text, and audio.
+data like images, text, and audio. Popular architectures include CNNs for images 
+and RNNs for sequences.
 
 Applications of Machine Learning:
 
-- Healthcare: Disease diagnosis, drug discovery
-- Finance: Fraud detection, algorithmic trading
-- Transportation: Autonomous vehicles, route optimization
-- Retail: Recommendation systems, inventory management
-- Natural Language Processing: Chatbots, translation services
+Healthcare: Machine learning assists in disease diagnosis, drug discovery, and 
+personalized treatment plans. Models can analyze medical images and predict 
+patient outcomes.
+
+Finance: Financial institutions use ML for fraud detection, algorithmic trading, 
+credit scoring, and risk assessment. Models analyze transaction patterns to 
+identify anomalies.
+
+Transportation: Autonomous vehicles rely heavily on machine learning for object 
+detection, path planning, and decision making. ML also optimizes route planning 
+and traffic prediction.
+
+Retail: Recommendation systems suggest products based on user behavior. ML also 
+powers inventory management, demand forecasting, and dynamic pricing.
+
+Natural Language Processing: Chatbots, virtual assistants, machine translation, 
+and sentiment analysis all leverage ML. Modern language models can understand 
+and generate human-like text.
 
 Conclusion:
 
 Machine learning continues to evolve rapidly, enabling increasingly sophisticated 
-applications across various industries. Understanding its fundamentals is crucial 
-for leveraging its capabilities effectively.
+applications across various industries. Understanding its fundamentals - from 
+basic algorithms to deep learning - is crucial for leveraging its capabilities 
+effectively in real-world problems.
             """)
 
     # Ingest the document
@@ -221,13 +265,16 @@ for leveraging its capabilities effectively.
     print("="*60 + "\n")
 
     questions = [
-        "What is Reinforcement machine learning?",
+        "What is machine learning?",
+        "Explain the difference between supervised and unsupervised learning.",
+        "What are the applications of machine learning in healthcare?"
     ]
+
     for question in questions:
         print("="*60)
         result = rag.query(question, top_k=3)
 
-        print(f"💡 Answer:\n{result['answer']}\n")
+        print(f"💡 Answer LLM generated:\n{result['answer']}\n")
         
         print(f"📚 Sources ({len(result['sources'])} chunks):")
         for i, source in enumerate(result['sources'], 1):
@@ -238,11 +285,13 @@ for leveraging its capabilities effectively.
         print("\n")
     
     print("="*60)
-    print("✅ Demo complete!")
-    print("\nNext steps:")
-    print("  1. Try adding your own .txt files")
-    print("  2. Experiment with different questions")
-    print("  3. Look at the ChromaDB storage in ./chroma_db/")
+    print("✅ Phase 2 Demo Complete!")
+    print("\n🎓 What You Learned:")
+    print("   ✓ LLM integration with HuggingFace")
+    print("   ✓ Prompt engineering for RAG")
+    print("   ✓ Context building from retrieved chunks")
+    print("   ✓ Generating coherent answers from multiple sources")
+    print("\n🚀 Next: Phase 3 - Add FastAPI for REST endpoints!")
     print("="*60)
 
 

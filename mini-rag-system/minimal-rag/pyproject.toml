@@ -33,6 +33,7 @@ huggingface-hub = "^0.20.0"
 
 # Utilities
 python-dotenv = "^1.0.0"
+openai = "^2.14.0"
 
 [build-system]
 requires = ["poetry-core"]
