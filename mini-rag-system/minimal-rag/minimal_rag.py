@@ -162,7 +162,7 @@ class MinimalRAG:
         answer = self.llm.generate(
             query=question,
             context_chunks=context_chunks,
-            max_tokens=100,
+            max_tokens=10,
             temperature=0.1
         )
 

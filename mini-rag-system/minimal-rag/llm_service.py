@@ -105,7 +105,7 @@ Provide a clear, direct answer using the information from the context."""
         self,
         query: str,
         context_chunks: List[Dict],
-        max_tokens: int = 100,
+        max_tokens: int = 50,
         temperature: float = 0.7,
         retry_count: int = 3
     ) -> str:
