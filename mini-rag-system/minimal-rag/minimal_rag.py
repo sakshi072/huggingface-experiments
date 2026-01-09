@@ -16,6 +16,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from llm_service import LLMService
+from adv_parser import DocumentParser
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 50
@@ -79,8 +80,9 @@ class MinimalRAG:
         # 1. Read file
         with open(filepath, 'r', encoding='utf-8') as f:
             text = f.read()
+
         
-        print(f" File size: {len(text)} characters")
+        print(f"   Text length: {len(text)} characters")
 
         # 2. Split into chunks
         chunks = self.text_splitter.split_text(text)

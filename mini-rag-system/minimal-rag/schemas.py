@@ -90,6 +90,7 @@ class IngestResponse(BaseModel):
     filename: str = Field(..., description="Uploaded filename")
     chunks_created: int = Field(..., description="Number of chunks create")
     processing_time: float = Field(..., description="Processing time in secodns")
+    metadata: Optional[dict] = Field(None, description="Document metadata (pages, format, etc.)")
 
     class Config:
         json_schema_extra ={
@@ -97,7 +98,12 @@ class IngestResponse(BaseModel):
                 "message": "Document ingested successfully",
                 "filename": "ml_basics.txt",
                 "chunks_created": 15,
-                "processing_time": 3.2
+                "processing_time": 3.2,
+                "metadata": {
+                    "pages": 5,
+                    "format": "pdf",
+                    "file_size": 204800
+                }
             }
         }
 

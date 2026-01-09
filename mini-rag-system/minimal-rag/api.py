@@ -25,6 +25,8 @@ from schemas import (
     SourceReference
 )
 
+from adv_parser import DocumentParser
+
 # ============================================================================
 # FastAPI Application
 # ============================================================================
@@ -137,7 +139,7 @@ async def ingest_document(file: UploadFile = File(...)):
     """
     Upload and ingest a document.
     
-    Supported formats: .txt, .md, .pdf (future)
+    Supported formats: .txt, .md, .pdf, .docx
     
     The document will be:
     1. Saved temporarily
@@ -155,9 +157,9 @@ async def ingest_document(file: UploadFile = File(...)):
         )
     
     # Validate file type
-    allowed_extensions = {".txt", ".md"}
+    allowed_extensions = {".txt", ".md", ".pdf", ".docx"}
     file_ext = Path(file.filename).suffix.lower()
-
+    
     if file_ext not in allowed_extensions:
         raise HTTPException(
             status_code=400,
@@ -168,13 +170,25 @@ async def ingest_document(file: UploadFile = File(...)):
     try:
         start_time = time.time()
 
+        content = await file.read()
+
+        try:
+            parsed_result = DocumentParser.parse(content, file_ext)
+            text = parsed_result["text"]
+            doc_metadata = parsed_result["metadata"]
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to parse document: {str(e)}"
+            )
+
         with tempfile.NamedTemporaryFile(
-            mode='wb',
-            suffix = file_ext,
-            delete=False
+            mode='w',
+            suffix = '.txt',
+            delete=False,
+            encoding='utf-8'
         ) as temp_file:
-            content = await file.read()
-            temp_file.write(content)
+            temp_file.write(text)
             temp_path = temp_file.name
         
         # Ingest the file
@@ -189,7 +203,8 @@ async def ingest_document(file: UploadFile = File(...)):
             message = "Document ingested successfully",
             filename = file.filename,
             chunks_created=chunks_created,
-            processing_time=processing_time
+            processing_time=round(processing_time, 2),
+            metadata=doc_metadata
         )
     except Exception as e:
         raise HTTPException(
