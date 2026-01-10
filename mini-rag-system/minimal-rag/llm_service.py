@@ -73,8 +73,23 @@ class LLMService:
         # Format context
         context_parts = []
         for i, chunk in enumerate(context_chunks[:5], 1):
-            text = chunk.get('chunk', '')
-            context_parts.append(f"{text}")
+            # Handle different chunk formats
+            if isinstance(chunk, dict):
+                text = chunk.get('chunk') or chunk.get('text', '')
+            else:
+                text = str(chunk)
+            
+            if text.strip():
+                context_parts.append(f"{text}")
+        
+        # If no valid text found
+        if not context_parts:
+            return [
+                {
+                    "role": "user",
+                    "content": f"I don't have any valid context to answer this question: {query}"
+                }
+            ]
         
         context = "\n\n".join(context_parts)
         
@@ -122,11 +137,10 @@ Provide a clear, direct answer using the information from the context."""
         Returns:
             Generated answer
         """
+        # Handle empty context
         if not context_chunks:
-            return "I cannot answer this question as no relevant context was found."
-        
-        print(f"   🤖 Generating answer...")
-        
+            return "I cannot answer this question as no relevant documents were found. Please upload some documents first."
+                
         # Build messages
         messages = self._build_messages(query, context_chunks)
         
@@ -221,59 +235,3 @@ Provide a clear, direct answer using the information from the context."""
             
             print(f"   ❌ Connection failed: {e}")
             return False
-
-
-# Example usage
-if __name__ == "__main__":
-    print("=" * 60)
-    print("HuggingFace Serverless API - Test")
-    print("=" * 60)
-    
-    # Initialize
-    try:
-        llm = LLMService(model_name="llama")  # Llama 3.2 works well
-    except ValueError as e:
-        print(f"\n❌ {e}")
-        print("\nCreate a .env file with:")
-        print("HUGGINGFACE_API_KEY=hf_your_token_here")
-        print("\nGet token at: https://huggingface.co/settings/tokens")
-        exit(1)
-    
-    # Test connection
-    print()
-    if not llm.test_connection():
-        print("\n⚠️  API not ready. Wait 30-60s and try again.")
-        exit(0)
-    
-    # Test generation
-    print("\n" + "=" * 60)
-    print("Testing Answer Generation")
-    print("=" * 60)
-    
-    sample_chunks = [
-        {
-            "text": "Machine learning is a subset of artificial intelligence that enables systems to learn from data.",
-            "source": "ml_basics.txt"
-        },
-        {
-            "text": "Deep learning uses neural networks with multiple layers to process complex patterns.",
-            "source": "ml_basics.txt"
-        }
-    ]
-    
-    question = "What is machine learning?"
-    
-    print(f"\nQuestion: {question}\n")
-    answer = llm.generate(question, sample_chunks, max_tokens=100)
-    
-    print("\n" + "=" * 60)
-    print("Generated Answer:")
-    print("=" * 60)
-    print(answer)
-    print("\n" + "=" * 60)
-    print("✅ Test complete!")
-    print("\n💡 Available models:")
-    print("   llama   - Fast, recommended (default)")
-    print("   phi     - Very fast, good quality")
-    print("   qwen    - Code-focused, excellent")
-    print("   mistral - Nemo model, high quality")

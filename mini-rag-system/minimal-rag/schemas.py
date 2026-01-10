@@ -3,7 +3,7 @@ Pydantic schemas for API request/response validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 # ============================================================================
 # REQUEST SCHEMAS
@@ -27,11 +27,26 @@ class QueryRequest(BaseModel):
         description="Number of chunks to retrieve"
     )
 
+    temperature: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="LLM temperature (0=factual, 1=creative)"
+    )
+    max_tokens: int = Field(
+        default=20,
+        ge=10,
+        le=500,
+        description="Maximum tokens in response"
+    )
+
     class Config:
         json_schema_extra = {
             "example":{
                 "query": "What is machine learning?",
-                "top_k": 3
+                "top_k": 3,
+                "temperature": 0.2,
+                "max_token":50
             }
         }
 
@@ -45,16 +60,14 @@ class SourceReference(BaseModel):
     """Source chunk reference in query response."""
 
     text:str = Field(..., description="Retrieved text chunk")
-    source:str = Field(..., description="Source filename")
-    chunk_index:int = Field(..., description="Chunk index in document")
+    filename:str = Field(..., description="Source filename")
     similarity:float = Field(..., ge=0.0, le=1.0, description="Similarity score")
 
     class Config:
         json_schema_extra = {
             "example":{
                 "text": "Machine learning is a subset of AI...",
-                "source": "ml_basics.txt",
-                "chunk_index": 0,
+                "filename": "ml_basics.txt",
                 "similarity": 0.89
             }
         }
@@ -74,7 +87,6 @@ class QueryResponse(BaseModel):
                     {
                         "text": "Machine learning enables systems to learn...",
                         "source": "ml_basics.txt",
-                        "chunk_index": 0,
                         "similarity": 0.89
                     }
                 ],
@@ -87,15 +99,18 @@ class IngestResponse(BaseModel):
     """Response schema for document ingestion."""
 
     message: str = Field(..., description="Status message")
+    document_id: str = Field(..., description="Document UUID")
     filename: str = Field(..., description="Uploaded filename")
     chunks_created: int = Field(..., description="Number of chunks create")
     processing_time: float = Field(..., description="Processing time in secodns")
     metadata: Optional[dict] = Field(None, description="Document metadata (pages, format, etc.)")
+    status: str = Field(..., description="Status of uploaded file")
 
     class Config:
         json_schema_extra ={
             "example":{
                 "message": "Document ingested successfully",
+                "document_id": "123e4567-e89b-12d3-a456-426614174000",
                 "filename": "ml_basics.txt",
                 "chunks_created": 15,
                 "processing_time": 3.2,
@@ -103,7 +118,48 @@ class IngestResponse(BaseModel):
                     "pages": 5,
                     "format": "pdf",
                     "file_size": 204800
-                }
+                },
+                "status": "processing"
+            }
+        }
+
+class DocumentMetadata(BaseModel):
+    """Document metadata schema"""
+    id: str = Field(..., description="Document UUID")
+    filename: str = Field(..., description="Original filename")
+    status: str = Field(..., description="Processing status")
+    chunk_count: int = Field(..., description="Number of chunks")
+    created_at: str = Field(..., description="Upload timestamp (ISO 8601)")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "id": "123e4567-e89b-12d3-a456-426614174000",
+                "filename": "report.pdf",
+                "status": "completed",
+                "chunk_count": 42,
+                "created_at": "2026-01-09T15:30:00"
+            }
+        }
+
+class DocumentListResponse(BaseModel):
+    """Response schema for listing documents"""
+    documents: List[DocumentMetadata] = Field(..., description="List of documents")
+    total: int = Field(..., description="Total document count")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "documents": [
+                    {
+                        "id": "123e4567-e89b-12d3-a456-426614174000",
+                        "filename": "report.pdf",
+                        "status": "completed",
+                        "chunk_count": 42,
+                        "created_at": "2026-01-09T15:30:00"
+                    }
+                ],
+                "total": 1
             }
         }
 
@@ -118,23 +174,33 @@ class HealthResponse(BaseModel):
             "example": {
                 "status": "healthy",
                 "components": {
-                    "vector_db": "ok",
+                    "rag": "ok",
+                    "postgres": "ok",
+                    "minio": "ok",
                     "llm": "ok"
                 }
             }
         }
 
 class StatResponse(BaseModel):
-    """System statistics response."""
-
-    total_chunks: int = Field(..., description="Total chunks in databases")
-    collection_name: str = Field(..., description="Vector collection name")
-
+    """Statistics response"""
+    total_documents: int = Field(..., description="Total documents in system")
+    total_chunks: int = Field(..., description="Total chunks in system")
+    status_breakdown: Dict[str, int] = Field(
+        ..., 
+        description="Documents by status"
+    )
+    
     class Config:
-        json_schema_extra = {
+        schema_extra = {
             "example": {
-                "total_chunks": 127,
-                "collection_name": "documents"
+                "total_documents": 42,
+                "total_chunks": 1337,
+                "status_breakdown": {
+                    "completed": 40,
+                    "processing": 1,
+                    "failed": 1
+                }
             }
         }
 
