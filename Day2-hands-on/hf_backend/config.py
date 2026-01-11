@@ -7,14 +7,17 @@ from pymongo import MongoClient # New Import
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from contextlib import contextmanager
+from dotenv import load_dotenv
+from openai import OpenAI
 
 # --- Logging Setup ---
 # Configure a basic logger for the application
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger("HuggBackend")
 
+load_dotenv()
 # --- Configuration ---
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
+HF_TOKEN = os.getenv("HF_TOKEN", "")
 MODEL_ID = "meta-llama/Meta-Llama-3-8B-Instruct"
 API_BASE_URL = "https://router.huggingface.co/v1/"
 MAX_TOKENS = 50
@@ -22,13 +25,13 @@ TEMPERATURE = 0.7
 
 # --- MongoDB Configuration ---
 # NOTE: Replace with your actual connection details
-MONGO_URI = os.environ.get("MONGO_URI")
-DB_NAME = os.environ.get("MONGO_DB_NAME")
+MONGO_URI = os.getenv("MONGO_URI")
+DB_NAME = os.getenv("MONGO_DB_NAME")
 
 MONGO_POOL_CONFIG = {
     # Connection Pool Size
-    "maxPoolSize": int(os.environ.get("MONGO_MAX_POOL_SIZE", "50")),
-    "minPoolSize": int(os.environ.get("MONGO_MIN_POOL_SIZE", "10")),
+    "maxPoolSize": int(os.getenv("MONGO_MAX_POOL_SIZE", "50")),
+    "minPoolSize": int(os.getenv("MONGO_MIN_POOL_SIZE", "10")),
 
     # Connection Timeouts (milliseconds)
     "connecttimeoutms": 10000, # 10 seconds to establish connection
@@ -202,7 +205,7 @@ def initialize_hf_client() -> InferenceClient | None:
         return None
 
     try:
-        client = InferenceClient(
+        client = OpenAI(
             base_url=API_BASE_URL,
             api_key=HF_TOKEN
         )

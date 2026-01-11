@@ -6,12 +6,14 @@ interface AuthState {
     isAuthenticated: boolean;
     isLoaded: boolean;
     hasInitialized: boolean;
-    
+    isTokenReady: boolean;
+
     // Actions
     setUserId: (userId: string | null) => void;
     setIsAuthenticated: (auth: boolean) => void;
     setIsLoaded: (loaded: boolean) => void;
     setHasInitialized: (initialized: boolean) => void;
+    setIsTokenReady: (ready: boolean) => void;
     
     // Reset
     resetAuth: () => void;
@@ -25,6 +27,7 @@ interface AuthState {
         isAuthenticated: false,
         isLoaded: false,
         hasInitialized: false,
+        isTokenReady: false,
         
         // Actions
         setUserId: (userId) => set({ userId }),
@@ -35,12 +38,14 @@ interface AuthState {
         
         setHasInitialized: (initialized) => set({ hasInitialized: initialized }),
         
+        setIsTokenReady: (ready) => set({ isTokenReady: ready }),
         // Reset
         resetAuth: () => set({
           userId: null,
           isAuthenticated: false,
           isLoaded: false,
           hasInitialized: false,
+          isTokenReady: false,
         }),
       }),
       { name: 'AuthStore' }

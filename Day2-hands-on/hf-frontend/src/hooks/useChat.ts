@@ -55,7 +55,8 @@ export const useChat = () => {
         hasInitialized,
         setIsAuthenticated,
         setIsLoaded,
-        setHasInitialized
+        setHasInitialized,
+        isTokenReady,
     } = useAuthStore();
 
     const prevAuthState = useRef(isAuthenticated);
@@ -83,7 +84,7 @@ export const useChat = () => {
         const currentUserId = user?.sub || null;
         
         // Skip if conditions not met
-        if (isLoading || !isAuthenticated || !currentUserId || hasInitialized) {
+        if (isLoading || !isAuthenticated || !currentUserId || hasInitialized || !isTokenReady) {
             return;
         }
 
@@ -123,7 +124,7 @@ export const useChat = () => {
                 }, 1000);
             });
             
-    }, [isLoading, isAuthenticated, hasInitialized, user, setHasInitialized]);
+    }, [isLoading, isAuthenticated, hasInitialized, user, setHasInitialized, isTokenReady]);
 
     const initializeChats = async () => {
         try {

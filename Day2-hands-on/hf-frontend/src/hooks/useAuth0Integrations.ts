@@ -18,7 +18,8 @@ export function useAuth0Integration() {
         setUserId,
         setIsAuthenticated,
         setIsLoaded,
-        resetAuth
+        resetAuth,
+        setIsTokenReady
     } = useAuthStore();
 
     /**
@@ -33,6 +34,7 @@ export function useAuth0Integration() {
 
     const storeAccessToken = useCallback(async () => {
         if(!isAuthenticated){
+            setIsTokenReady(false);
             return null
         }
 
@@ -42,17 +44,19 @@ export function useAuth0Integration() {
                     audience: import.meta.env.VITE_AUTH0_AUDIENCE,
                 },
             });
+            console.log("In auth integration:", token)
 
             setAuthToken(token, 86400);
-
+            setIsTokenReady(true);
             console.log('[Auth0 Integration] Token stored successfully');
             return token;
         } catch(error){
             console.error('[Auth0 Integration] Error getting access token:', error)
             clearAuthTokens();
+            setIsTokenReady(false);
             return null;
         }
-    }, [isAuthenticated, getAccessTokenSilently, resetAuth])
+    }, [isAuthenticated, getAccessTokenSilently, resetAuth, setIsTokenReady])
 
     /**
      * Store user information
@@ -113,6 +117,7 @@ export function useAuth0Integration() {
 
             if(isLoading){
                 setIsLoaded(false);
+                setIsTokenReady(false);
                 return;
             }
 
@@ -128,6 +133,7 @@ export function useAuth0Integration() {
             } else {
                 setIsAuthenticated(false);
                 setUserId(null);
+                setIsTokenReady(false);
                 console.log('[Auth0 Integration] User not authenticated');
             }
         };
