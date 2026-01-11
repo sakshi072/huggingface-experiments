@@ -3,7 +3,7 @@ MinIO storage service for document file operations
 """
 import os
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, BinaryIO
 from uuid import uuid4
 
@@ -223,6 +223,31 @@ class StorageService:
             ]
         except S3Error as e:
             raise Exception(f"Failed to list files from MinIO: {e}")
+    
+    def get_presigned_url(
+        self,
+        object_key:str,
+        expiray_seconds:int = 3600
+    ) -> str:
+        """
+        Generate a presigned URL for temporary file access
+        
+        Args:
+            object_key: Object key in MinIO
+            expiry_seconds: URL expiration time in seconds (default 1 hour)
+            
+        Returns:
+            Presigned URL (valid for specified duration)
+        """
+        try:
+            url = self.client.presigned_get_object(
+                self.bucket_name,
+                object_key,
+                expires=timedelta(seconds=expiray_seconds)
+            )
+            return url
+        except S3Error as e:
+            raise Exception(f"Failed to generate presigned URL: {e}")
 
 # Global storage service instance
 storage_service = StorageService()

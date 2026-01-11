@@ -25,6 +25,7 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_type: Mapped[str] = mapped_column(String(10), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True) # SHA-256 hash
     minio_object_key: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
 
     # Processing status

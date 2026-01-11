@@ -9,7 +9,7 @@ from typing import List, Optional, Dict
 # REQUEST SCHEMAS
 # ============================================================================
 
-class QueryRequest(BaseModel):
+class SearchRequest(BaseModel):
     """Request schema for querying the RAG system."""
 
     query:str = Field(
@@ -27,26 +27,11 @@ class QueryRequest(BaseModel):
         description="Number of chunks to retrieve"
     )
 
-    temperature: float = Field(
-        default=0.1,
-        ge=0.0,
-        le=1.0,
-        description="LLM temperature (0=factual, 1=creative)"
-    )
-    max_tokens: int = Field(
-        default=20,
-        ge=10,
-        le=500,
-        description="Maximum tokens in response"
-    )
-
     class Config:
         json_schema_extra = {
             "example":{
                 "query": "What is machine learning?",
-                "top_k": 3,
-                "temperature": 0.2,
-                "max_token":50
+                "top_k": 3
             }
         }
 
@@ -62,32 +47,33 @@ class SourceReference(BaseModel):
     text:str = Field(..., description="Retrieved text chunk")
     filename:str = Field(..., description="Source filename")
     similarity:float = Field(..., ge=0.0, le=1.0, description="Similarity score")
+    file_url: Optional[str] = Field(None, description="Download link") 
 
     class Config:
         json_schema_extra = {
             "example":{
                 "text": "Machine learning is a subset of AI...",
                 "filename": "ml_basics.txt",
-                "similarity": 0.89
+                "similarity": 0.89,
+                "file_url": "http://localhost:9000/documents/2026/01/10/abc_ml_guide.pdf?X-Amz-..."
             }
         }
 
-class QueryResponse(BaseModel):
+class SearchResponse(BaseModel):
     """Response schema for RAG query."""
 
-    answer:str = Field(..., description="Generate Answer")
     sources: List[SourceReference] = Field(..., description="Source chunks used")
     query_time: float = Field(..., description="Query processing time in seconds")
 
     class Config:
         json_schema_extra = {
             "example":{
-                "answer": "Machine learning is a subset of artificial intelligence...",
                 "sources": [
                     {
                         "text": "Machine learning enables systems to learn...",
                         "source": "ml_basics.txt",
-                        "similarity": 0.89
+                        "similarity": 0.89,
+                        "file_url": "http://localhost:9000/documents/2026/01/10/abc_ml_guide.pdf?X-Amz-..."
                     }
                 ],
                 "query_time": 1.23

@@ -14,11 +14,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from minimal_rag import MinimalRAG
+from minimal_rag import KnowledgeBase
 from database import startup_database, shutdown_database, get_session
 from schemas import (
-    QueryRequest,
-    QueryResponse,
+    SearchRequest,
+    SearchResponse,
     IngestResponse,
     HealthResponse,
     StatResponse,
@@ -53,7 +53,7 @@ app.add_middleware(
 # Global RAG Instance (initialized on startup)
 # ============================================================================
 
-rag: Optional[MinimalRAG] = None
+rag: Optional[KnowledgeBase] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -66,7 +66,7 @@ async def startup_event():
         await startup_database()
 
         # Initialize RAG system
-        rag = MinimalRAG()
+        rag = KnowledgeBase()
         print("RAG system initialized successfully")
 
     except Exception as e:
@@ -104,7 +104,7 @@ async def root():
         "features": [
             "PostgreSQL vector database (persistent storage)",
             "MinIO object storage (original files preserved)",
-            "Document citations with page numbers",
+            "Document citations",
             "Metadata tracking and versioning",
             "Production-grade architecture"
         ]
@@ -119,7 +119,6 @@ async def health_check():
     - RAG system
     - PostgreSQL database
     - MinIO storage
-    - LLM service
     """
     if rag is None:
         raise HTTPException(
@@ -211,7 +210,7 @@ async def ingest_document(file: UploadFile = File(...)):
         file_data = await file.read()
 
         # Ingest document using your MinimalRAG
-        document_id = await rag.ingest_file(
+        document_id, is_duplicate = await rag.ingest_file(
             file_data=file_data,
             filename=file.filename,
             file_type=file_ext,
@@ -226,9 +225,14 @@ async def ingest_document(file: UploadFile = File(...)):
         doc_metadata = doc.get("metadata")
         if doc_metadata is not None and not isinstance(doc_metadata, dict):
             doc_metadata = {}
+        
+        if is_duplicate:
+            message = "Duplicate file detected! Using existing document."
+        else:
+            message = "Document ingested successfully"
 
         return IngestResponse(
-            message = "Document ingested successfully",
+            message = message,
             document_id=str(document_id),
             filename = file.filename,
             chunks_created=doc["chunk_count"],
@@ -242,8 +246,8 @@ async def ingest_document(file: UploadFile = File(...)):
             detail=f"Error processing document: {str(e)}"
         )
 
-@app.post('/search', response_model=QueryResponse, tags=["Query"])
-async def query_documets(request: QueryRequest):
+@app.post('/search', response_model=SearchResponse, tags=["Query"])
+async def search_documets(request: SearchRequest):
     """
     Query the RAG system with semantic search.
     
@@ -257,14 +261,10 @@ async def query_documets(request: QueryRequest):
     Parameters:
     - query: Your question (3-500 characters)
     - top_k: Number of chunks to retrieve (1-10, default 3)
-    - temperature: LLM creativity (0.0-1.0, default 0.1)
-    - max_tokens: Max answer length (default 100)
     
     Returns:
-    - AI-generated answer
     - Source citations with:
       - Document filename
-      - Page number (for PDFs)
       - Similarity score
       - Text preview
     """
@@ -277,19 +277,16 @@ async def query_documets(request: QueryRequest):
     try: 
         start_time = time.time()
 
-        result = await rag.query(
+        result = await rag.search(
             query_text=request.query,
-            top_k=request.top_k,
-            temperature=getattr(request, 'temperature', '0.1'),
-            max_tokens=getattr(request, 'max_tokens', 10)
+            top_k=request.top_k
         )
 
         query_time = time.time() - start_time
 
         # Check if we got results
         if not result.get("sources"):
-            return QueryResponse(
-                answer="I couldn't find any relevant documents to answer your question. Please upload some documents first.",
+            return SearchResponse(
                 sources = [],
                 query_time=round(query_time,2)
             )
@@ -297,20 +294,19 @@ async def query_documets(request: QueryRequest):
         # Format sources
         sources = [
             SourceReference(
-                text=source["text_preview"],
+                text=source["text"],
                 filename=source["filename"],
-                page_number=source.get("page_number"),
                 similarity=round(source["similarity"], 3),
-                
+                file_url=source["file_url"]
             )
             for source in result["sources"]
         ]
 
-        return QueryResponse(
-            answer=result["answer"],
+        return SearchResponse(
             sources=sources,
             query_time=round(query_time,2)
         )
+
     except Exception as e:
         raise HTTPException(
             status_code=500,

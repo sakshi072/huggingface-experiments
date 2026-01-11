@@ -24,12 +24,13 @@ from models import Document, DocumentChunk
 from storage_service import storage_service
 from llm_service import LLMService
 from adv_parser import DocumentParser
+import hashlib
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 50
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-class MinimalRAG:
+class KnowledgeBase:
     """Minimal RAG system for learning."""
 
     def __init__(self):
@@ -47,17 +48,20 @@ class MinimalRAG:
             separators = ["\n\n","\n", ". ", " ", ""]
         )
 
-        print("   Initializing LLM service...")
-        try:
-            self.llm = LLMService(model_name="llama")
-            print("   ✓ LLM ready!")
-        except ValueError as e:
-            print(f"{e}")
+        # print("   Initializing LLM service...")
+        # try:
+        #     self.llm = LLMService(model_name="llama")
+        #     print("   ✓ LLM ready!")
+        # except ValueError as e:
+        #     print(f"{e}")
         
         # Initialize database
         db_manager.initialize()
         
         print("✅ Initialization complete!\n")
+
+    def calculate_file_hash(self, file_data:bytes) -> str:
+        return hashlib.sha256(file_data).hexdigest()
 
     async def ingest_file(
         self, 
@@ -81,6 +85,18 @@ class MinimalRAG:
         print(f"\n📄 Ingesting document: {filename}")
 
         async with db_manager.session() as session:
+
+            # Calculate hash
+            file_hash = self.calculate_file_hash(file_data)
+
+            # Check for duplicates
+            existing = await session.execute(
+                select(Document).where(Document.file_hash == file_hash) 
+            )
+            if existing_doc := existing.scalar_one_or_none():
+                print(f"⚠️ Duplicate! Using existing doc {existing_doc.id}")
+                return existing_doc.id, True
+
             try: 
                 # 1. Upload File to MinIO
                 print("   1/6 Uploading original file to MinIO...")
@@ -98,6 +114,7 @@ class MinimalRAG:
                     filename=filename,
                     file_type=file_type,
                     file_size = len(file_data),
+                    file_hash = file_hash,
                     minio_object_key = object_key,
                     status="processing",
                     metadata_ = metadata or {}
@@ -190,7 +207,7 @@ class MinimalRAG:
                 print(f"   Document ID: {document.id}")
                 print(f"   Chunks: {len(chunks)}")
                 
-                return document.id
+                return document.id, False
             except Exception as e:
                 # Mark document as failed
                 if 'document' in locals():
@@ -201,12 +218,10 @@ class MinimalRAG:
                 print(f"❌ Ingestion failed: {e}")
                 raise
 
-    async def query(
+    async def search(
         self, 
         query_text:str, 
         top_k:int=3,
-        temperature:float = 0.1,
-        max_tokens: int = 50
     ) -> Dict:
         """
         Query the RAG system
@@ -214,11 +229,9 @@ class MinimalRAG:
         Args:
             query_text: User's question
             top_k: Number of chunks to retrieve
-            temperature: LLM temperature
-            max_tokens: Max tokens in response
             
         Returns:
-            Dictionary with answer and sources
+            Dictionary with sources
         """
         print(f"\n❓ Query: {query_text}")
 
@@ -264,36 +277,37 @@ class MinimalRAG:
             print("   3/3 Generating answer...")
 
             # Prepare context and sources
-            context_chunks = []
             sources = []
 
             for chunk, doc, similarity in results:
-                context_chunks.append({
-                    "chunk":chunk.text,
-                    "text": chunk.text
-                    })
+                try:
+                    file_url = storage_service.get_presigned_url(doc.minio_object_key, expiray_seconds=3600)
+                except Exception as e:
+                    print(f"   ⚠️  Failed to generate URL for {doc.filename}: {e}")
+                    file_url = None
+
                 sources.append({
                     "document_id": str(doc.id),
                     "filename": doc.filename,
                     "chunk_index": chunk.chunk_index,
-                    "page_number": chunk.page_number,
                     "similarity": float(similarity),
-                    "text_preview": chunk.text[:200] + "..." if len(chunk.text) > 200 else chunk.text
+                    "text": chunk.text,
+                    "file_url": file_url
                 })
 
-            # Generate answer
-            print("   Generating answer with LLM...")
-            answer = self.llm.generate(
-                query=query_text,
-                context_chunks=context_chunks,
-                max_tokens=max_tokens,
-                temperature=temperature
-            )
+            # # Generate answer
+            # print("   Generating answer with LLM...")
+            # answer = self.llm.generate(
+            #     query=query_text,
+            #     context_chunks=context_chunks,
+            #     max_tokens=max_tokens,
+            #     temperature=temperature
+            # )
 
-            print(f"✅ Answer generated!")
+            print(f"✅ Sources generated!")
+            print(sources)
 
             return {
-                "answer": answer,
                 "sources": sources,
                 "query": query_text
             }

@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS documents (
     filename VARCHAR(255) NOT NULL,
     file_type VARCHAR(10) NOT NULL,
     file_size INTEGER NOT NULL,
+    file_hash VARCHAR(64) NOT NULL,
     minio_object_key VARCHAR(500) NOT NULL UNIQUE,
     
     -- Processing status
