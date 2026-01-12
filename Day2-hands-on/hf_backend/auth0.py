@@ -93,7 +93,7 @@ class JWKSCache:
                 return self._jwks
 
         try:
-            logger.info("Fetching JWKS from Auht...")
+            logger.info("Fetching JWKS from Auth...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     auth0_config.jwks_url,

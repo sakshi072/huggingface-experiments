@@ -18,9 +18,10 @@ logger = logging.getLogger("HuggBackend")
 load_dotenv()
 # --- Configuration ---
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-MODEL_ID = "meta-llama/Meta-Llama-3-8B-Instruct"
+# MODEL_ID = "deepseek-ai/DeepSeek-R1-0528"
+MODEL_ID = "gpt-4o-mini"
 API_BASE_URL = "https://router.huggingface.co/v1/"
-MAX_TOKENS = 50
+MAX_TOKENS = 10
 TEMPERATURE = 0.7
 
 # --- MongoDB Configuration ---
@@ -193,7 +194,8 @@ def mongo_session():
 # Define the initial system message using the HistoryMessage model
 SYSTEM_MESSAGE_INFERENCE: Dict[str, str] = {
     "role": "system",
-    "content": "You are friendly, detail oriented and concise AI assistant named 'HUGG'. Keep your answers accurate and brief."
+    "content": "You are HUGG, a helpful AI assistant. Provide clear, accurate answers. You have access to tools. If the user asks a question about internal documents or knowledge you don't have, you MUST use the search_knowledge_base tool. Do not answer from memory if the tool can help."
+    # "content": "You are HUGG, a helpful AI assistant. Provide clear, accurate answers. You have access to tools. Always use tools before answering ques"
 }
 
 # --- Hugging Face Client Initialization ---
@@ -205,10 +207,11 @@ def initialize_hf_client() -> InferenceClient | None:
         return None
 
     try:
-        client = OpenAI(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN
-        )
+        # client = InferenceClient(
+        #     base_url=API_BASE_URL,
+        #     api_key=HF_TOKEN
+        # )
+        client = OpenAI()
         logger.info("Hugging Face InferenceClient initialized.")
         return client
     except Exception as e:

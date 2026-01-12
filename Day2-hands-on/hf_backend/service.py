@@ -7,31 +7,107 @@ from .config import (
 )
 from .models import HistoryMessage, ChatSessionMetadata
 from .mongodb_client_handler import MONGO_CHAT_CLIENT
+from .rag_client import get_rag_client, get_rag_tool_definition, format_tool_response
+import json
+import re
+
+def clean_thinking_tags(text: str) -> str:
+    """Remove thinking tags from LLM output"""
+    if not text:
+        return text
+    cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    return cleaned.strip()
 
 def sync_call_hf_api(
-    messages: List[Dict[str, str]]
-) -> str:
+    messages: List[Dict[str, str]],
+    tools: Optional[List[Dict]] = None,
+    max_tokens: int = 100
+) -> dict:
     """Performs the synchronous blocking call to the Hugging Face API."""
 
     if HF_CLIENT is None:
         raise ConnectionError("Hugging Face client is not initialized.")
     
-    logger.debug(f"Calling LLM with context length: {len(messages)}")
+    logger.debug(f"Calling LLM with {len(messages)} messages and {len(tools or [])} tools")
     try:
         completion = HF_CLIENT.chat.completions.create(
             model=MODEL_ID,
+            tools=tools,
+            # tool_choice = "auto", # Let LLM decide
             messages=messages,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens,
             temperature=TEMPERATURE,
             stream=False
         )
 
-        return completion.choices[0].message.content
+        message = completion.choices[0].message
+
+        logger.info(message)
+
+        content = clean_thinking_tags(message.content) if message.content else None
+
+        if hasattr(message, 'tool_calls') and message.tool_calls:
+            return {
+                "content":  content,
+                "tool_calls": getattr(message, 'tool_calls', None)
+            }
+        else:
+            return {
+                "content": content,
+                "tool_calls": None
+            }
 
     except Exception as e:
         logger.error(f"External LLM API Error during call: {e}", exc_info=True)
         raise RuntimeError(f"External LLM API call failed: {e}")
 
+async def handle_tool_call(tool_call) -> str:
+    """
+    Execute a tool call and return the result
+    
+    Args:
+        tool_call: Tool call object from LLM
+        
+    Returns:
+        Formatted tool response
+    """
+    function_name = tool_call.function.name
+
+    if function_name == 'search_knowledge_base':
+        # Parse arguments
+        try:
+            args = tool_call.function.arguments
+
+            if isinstance(args, str):
+                args = json.loads(args)
+            elif isinstance(args, dict):
+                pass
+            else:
+                raise ValueError(f"Unexpected arguments type: {type(args)}")
+            query = args.get('query', '')
+            top_k = args.get('top_k', 3)
+
+            logger.info(f"🔧 Tool Call: search_knowledge_base(query='{query}', top_k={top_k})")
+
+            # Call RAG service
+            rag_client = get_rag_client()
+            sources = await rag_client.search(query, top_k)
+
+            # Format response
+            if sources:
+                response = format_tool_response(sources)
+                logger.info(f"✅ Tool returned {len(sources)} sources")
+                return response
+            else:
+                logger.warning("Tool returned no sources")
+                return "No relevant information found in the knowledge base."
+
+        except Exception as e:
+            logger.error(f"❌ Tool call failed: {e}")
+            return f"Error searching knowledge base: {str(e)}"
+    else:
+        logger.warning(f"Unknown tool: {function_name}")
+        return f"Unknown tool: {function_name}"
 
 async def generate_response(
     user_id: str,
@@ -42,6 +118,16 @@ async def generate_response(
 ) -> str:
     """
     Manages history, calls the LLM, updates history, and returns only the response text.
+    
+    Generate response with LLM-powered RAG tool calling
+    
+    Flow:
+    1. User sends message
+    2. LLM decides if it needs RAG
+    3. If yes, LLM calls search_knowledge_base tool
+    4. We execute the tool call
+    5. Send results back to LLM
+    6. LLM generates final answer
     """
 
     log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [UID:{user_id[:8]}] [CHAT:{chat_id[:8]}]"
@@ -81,17 +167,84 @@ async def generate_response(
     # 4. CRITICAL: Construct the inference context list
     # The context list MUST START with the system message
     inference_context = [SYSTEM_MESSAGE_INFERENCE]
+
     inference_context.extend([
         msg.to_inference_format()
         for msg in history_messages
     ])
 
+    # 5. Define available tools
+    tools = [get_rag_tool_definition()]
+
     try:
-        # 5. Call the synchronous API in a thread pool
-        response_text = await run_in_threadpool(
+        # 6. Call the synchronous API in a thread pool
+        logger.info(f"{log_prefix} 🤖 Calling LLM with tools...")
+
+        first_response = await run_in_threadpool(
             sync_call_hf_api,
-            messages=inference_context
+            messages=inference_context,
+            tools = tools,
+            max_tokens = 100
         )
+
+        logger.info("first_response:", first_response)
+
+        # 7. Check if LLM wants to use tools
+        if first_response['tool_calls']:
+            logger.info(f"{log_prefix} 🔧 LLM requested {len(first_response['tool_calls'])} tool call(s)!")
+
+            # Add LLM's response to context
+            inference_context.append({
+                "role": "assistant",
+                "content": first_response['content'],
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments 
+                        }
+                    }
+                    for tc in first_response['tool_calls']
+                ]
+            })
+
+            # 8. Execute each tool call
+            for tool_call in first_response['tool_calls']:
+                tool_result = await handle_tool_call(tool_call)
+
+                # Add tool result to context
+                inference_context.append({
+                    "role": "tool",
+                    "tool_call_id": getattr(tool_call, 'id', 'call_1'),
+                    "name": tool_call.function.name,
+                    "content": tool_result
+                })
+            
+            # 9. Second LLM call - generate final answer with tool results
+            logger.info(f"{log_prefix} 🤖 Calling LLM with tool results...")
+
+            final_response = await run_in_threadpool(
+                sync_call_hf_api,
+                messages = inference_context,
+                tools = None,
+                max_tokens = 100
+            )
+
+            response_text = final_response['content']
+            logger.info(f"{log_prefix} ✅ Generated response with RAG")
+        
+        else:
+            # No tools needed - use direct response
+            response_text = first_response['content']
+            logger.info(f"{log_prefix} ✅ Generated response without RAG")
+        
+        if not response_text:
+            logger.error(f"{log_prefix} ❌ LLM returned empty response!")
+            response_text = "I apologize, but I wasn't able to generate a response. Please try again."
+
+        response_text = clean_thinking_tags(response_text)
 
         # 6. Prepare and append the assistant's response
         assistant_message = HistoryMessage(
