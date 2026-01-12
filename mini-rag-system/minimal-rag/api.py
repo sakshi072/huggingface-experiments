@@ -2,7 +2,7 @@
 FastAPI REST API for Mini RAG System
 
 Run: uvicorn api:app --reload
-Access: http://localhost:8000/docs
+Access: http://localhost:8001/docs
 """
 
 import time
@@ -475,9 +475,9 @@ async def global_exception_handler(request, exc):
     )
 
 # ============================================================================
-# Run with: uvicorn api:app --reload --host 0.0.0.0 --port 8000
+# Run with: uvicorn api:app --reload --host 0.0.0.0 --port 8001
 # ============================================================================
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)
