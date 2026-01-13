@@ -1,9 +1,11 @@
 """
-RAG Client 
+RAG Client with OAuth 2.0 Client Credentials authentication
 """
 import httpx
 import logging
 from typing import Optional, List, Dict
+
+from .auth0_token_manager import get_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,19 @@ class RAGClient:
     def __init__(self, rag_url: str = "http://localhost:8001"):
         self.rag_url = rag_url.rstrip('/')
         logger.info(f"RAG CLient initialized: {self.rag_url}")
+
+    async def _get_headers(self) -> dict:
+        """
+        Build request headers with OAuth access token
+        
+        Returns:
+            Headers with Authorization: Bearer <token>
+        """
+        access_token = await get_access_token()
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {access_token}"
+        }
 
     async def search(self, query:str, top_k:int=3) -> Optional[List[Dict]]:
         """
@@ -26,19 +41,30 @@ class RAGClient:
             List of source chunks or None if error
         """
         try:
+            headers = await self._get_headers()
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     f"{self.rag_url}/search",
-                    json={"query":query, "top_k":top_k}
+                    json={"query":query, "top_k":top_k},
+                    headers=headers
                 )
 
                 if response.status_code == 200:
                     data = response.json()
                     logger.info(f"RAG returned {len(data.get('sources', []))} sources")
                     return data.get('sources', [])
+                elif response.status_code == 401:
+                    logger.error("RAG authentication failed: Token invalid or expired")
+                    return None
+                elif response.status_code == 403:
+                    logger.error("RAG authorization failed: Insufficient permissions/scopes")
+                    return None
                 else:
                     logger.warning(f"RAG search failed: {response.status_code}")
                     return None
+        except httpx.TimeoutException:
+            logger.error("RAG request timeout")
+            return None
         except Exception as e:
             logger.error(f"RAG error: {e}")
             return None
