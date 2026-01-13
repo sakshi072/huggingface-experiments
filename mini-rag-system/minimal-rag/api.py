@@ -27,14 +27,17 @@ from schemas import (
     DocumentListResponse,
     ErrorResponse,
 )
+from auth0_validator import verify_jwt, require_scope, extract_scopes
+import logging
 
+logger = logging.getLogger(__name__)
 # ============================================================================
 # FastAPI Application
 # ============================================================================
 
 app = FastAPI(
     title="Mini RAG API",
-    description="Production-grade RAG system with document upload and querying",
+    description="Semantic search RAG system with document upload and querying and OAuth 2.0 authentication",
     version = "1.0.0",
     docs_url = "/docs",
     redoc_url = "/redoc"
@@ -247,9 +250,12 @@ async def ingest_document(file: UploadFile = File(...)):
         )
 
 @app.post('/search', response_model=SearchResponse, tags=["Query"])
-async def search_documets(request: SearchRequest):
+async def search_documets(
+    request: SearchRequest,
+    token: dict = Depends(require_scope("search:knowledge"))):
     """
     Query the RAG system with semantic search.
+    Search knowledge base (requires 'search:knowledge' scope)
     
     Process:
     1. Convert query to embedding
@@ -267,6 +273,10 @@ async def search_documets(request: SearchRequest):
       - Document filename
       - Similarity score
       - Text preview
+    
+    Security:
+    - Requires valid JWT token
+    - Token must have 'search:knowledge' scope
     """
     if rag is None:
         raise HTTPException(
@@ -275,6 +285,13 @@ async def search_documets(request: SearchRequest):
         )
     
     try: 
+        client_id = token.get("sub", "unknown")
+        scopes = extract_scopes(token)
+        
+        logger.info(
+            f"🔍 Search request from client: {client_id}, scopes: {scopes}"
+        )
+
         start_time = time.time()
 
         result = await rag.search(
