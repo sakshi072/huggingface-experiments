@@ -21,7 +21,7 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 # MODEL_ID = "deepseek-ai/DeepSeek-R1-0528"
 MODEL_ID = "gpt-4o-mini"
 API_BASE_URL = "https://router.huggingface.co/v1/"
-MAX_TOKENS = 10
+MAX_TOKENS = 100
 TEMPERATURE = 0.7
 
 # --- MongoDB Configuration ---

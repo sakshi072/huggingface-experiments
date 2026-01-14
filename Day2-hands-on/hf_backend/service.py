@@ -10,6 +10,16 @@ from .mongodb_client_handler import MONGO_CHAT_CLIENT
 from .rag_client import get_rag_client, get_rag_tool_definition, format_tool_response
 import json
 import re
+from langchain_openai import ChatOpenAI
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.messages import HumanMessage, AIMessage
+from .langchain_rag_tool import get_rag_tool
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def clean_thinking_tags(text: str) -> str:
     """Remove thinking tags from LLM output"""
@@ -109,25 +119,123 @@ async def handle_tool_call(tool_call) -> str:
         logger.warning(f"Unknown tool: {function_name}")
         return f"Unknown tool: {function_name}"
 
+def _convert_mongo_to_langchain(mongo_messages: List[HistoryMessage]) -> List:
+    """
+    Convert MongoDB history to LangChain format
+    
+    Args:
+        mongo_messages: List of HistoryMessage from MongoDB
+        
+    Returns:
+        List of LangChain messages
+    """
+    langchain_messages = []
+
+    for msg in mongo_messages:
+        if msg.role == "user":
+            langchain_messages.append(HumanMessage(content=msg.content))
+        elif msg.role == 'assistant':
+            langchain_messages.append(AIMessage(content=msg.content))
+    
+    return langchain_messages
+
+async def _generate_response_with_langchain(
+    chat_id:str,
+    prompt:str,
+    mongo_history: List[HistoryMessage],
+    log_prefix:str
+) -> str:
+    """
+    Generate response using LangChain agent
+    
+    Args:
+        chat_id: Chat session ID
+        prompt: User message
+        mongo_history: Chat history from MongoDB
+        log_prefix: Logging prefix
+        
+    Returns:
+        Generated response text
+    """
+    logger.info(f"{log_prefix} 🦜 Using LangChain agent...")
+
+    # 1. Convert MongoDB history to LangChain format
+    langchain_history = _convert_mongo_to_langchain(mongo_history)
+
+    # 2. Initialize LangChain components
+    llm = ChatOpenAI(
+        model="gpt-4o-mini",
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        openai_api_key=os.getenv("OPENAI_API_KEY")
+    )
+
+    # 3. Get RAG tool (reuses your existing RAG client!)
+    rag_tool = get_rag_tool()
+
+    # 4. Create agent prompt
+    agent_prompt = ChatPromptTemplate.from_messages([
+        ("system", SYSTEM_MESSAGE_INFERENCE.get("content", "You are a helpful assistant.")),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad")
+    ])
+
+    # 5. Create agent
+    agent = create_openai_tools_agent(
+        llm=llm,
+        tools = [rag_tool],
+        prompt=agent_prompt
+    )
+
+    # 6. Create executor
+    executor = AgentExecutor(
+        agent=agent,
+        tools=[rag_tool],
+        verbose=True,
+        max_iterations=5,
+        return_intermediate_steps=True
+    )
+
+    # 7. Execute with history from MongoDB
+    result = await executor.ainvoke(
+        {
+            "input":prompt,
+            "chat_history": langchain_history,
+            "current_date": datetime.now().strftime("%y-%m-%d")
+        }
+    )
+
+    # 8. Extract response
+    response_text = result["output"]
+    steps = result.get("intermediate_steps", [])
+    tool_calls = len([s for s in steps if s[0].tool == "search_knowledge_base"])
+
+    logger.info(f"{log_prefix} ✅ LangChain generated response (RAG calls: {tool_calls})")
+
+    return clean_thinking_tags(response_text)
+
 async def generate_response(
     user_id: str,
     chat_id: str,
     prompt: str,
     request_id: str,
-    correlation_id: str
+    correlation_id: str,
+    use_langchain: bool = False 
 ) -> str:
     """
-    Manages history, calls the LLM, updates history, and returns only the response text.
+    Generate response with optional LangChain enhancement
     
-    Generate response with LLM-powered RAG tool calling
-    
-    Flow:
-    1. User sends message
-    2. LLM decides if it needs RAG
-    3. If yes, LLM calls search_knowledge_base tool
-    4. We execute the tool call
-    5. Send results back to LLM
-    6. LLM generates final answer
+    Args:
+        user_id: User ID
+        chat_id: Chat session ID
+        prompt: User message
+        request_id: Request ID for logging
+        correlation_id: Correlation ID for logging
+        use_langchain: If True, use LangChain agent; if False, use original logic
+        
+    Returns:
+        Generated response text
     """
 
     log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [UID:{user_id[:8]}] [CHAT:{chat_id[:8]}]"
@@ -162,9 +270,78 @@ async def generate_response(
         content=prompt
     )
     history_messages.append(user_message)
+
+    try:
+        # 4. DECISION POINT: LangChain or Original?
+        if use_langchain:
+            # Use langchain agent
+            response_text = await _generate_response_with_langchain(
+                chat_id=chat_id,
+                prompt=prompt,
+                mongo_history=history_messages[:-1],
+                log_prefix=log_prefix
+            )
+        else:
+            # ORIGINAL PATH: Use your existing logic
+            response_text = await _generate_response_original(
+                prompt=prompt,
+                history_messages=history_messages,
+                log_prefix=log_prefix
+            )
+        
+        # 5. Validate response (UNCHANGED)
+        if not response_text:
+            logger.error(f"{log_prefix} ❌ Empty response!")
+            response_text = "I apologize, but I wasn't able to generate a response. Please try again."
+        
+        response_text = clean_thinking_tags(response_text)
+
+        # 6. Save to MongoDB (UNCHANGED)
+        assistant_message = HistoryMessage(
+            session_id=chat_id,
+            role="assistant",
+            content=response_text
+        )
+
+        await run_in_threadpool(
+            MONGO_CHAT_CLIENT.save_messages, 
+            chat_id, 
+            user_id, 
+            [user_message, assistant_message]
+        )
+
+        logger.info(f"{log_prefix} Successfully generated and stored response.")
+        return response_text
+
+    except (ConnectionError, RuntimeError) as e:
+        # Error handling (UNCHANGED)
+        error_message = HistoryMessage(
+            session_id=chat_id,
+            role="assistant",
+            content="LLM inference failed for session"
+        )
+        await run_in_threadpool(
+            MONGO_CHAT_CLIENT.save_messages, 
+            chat_id, 
+            user_id, 
+            [user_message, error_message]
+        )
+        raise HTTPException(status_code=500, detail={"error": "LLM_INFERENCE_FAILED"})
+
+async def _generate_response_original(
+    prompt: str,
+    history_messages: List[HistoryMessage],
+    log_prefix: str
+) -> str:
+    """
+    Original response generation logic (EXTRACTED from generate_response)
+    
+    This is your EXISTING code - moved to separate function for clarity
+    """
+
     logger.debug(f"{log_prefix} Appended user message to history.")
 
-    # 4. CRITICAL: Construct the inference context list
+    # 1. CRITICAL: Construct the inference context list
     # The context list MUST START with the system message
     inference_context = [SYSTEM_MESSAGE_INFERENCE]
 
@@ -173,11 +350,11 @@ async def generate_response(
         for msg in history_messages
     ])
 
-    # 5. Define available tools
+    # 2. Define available tools
     tools = [get_rag_tool_definition()]
 
     try:
-        # 6. Call the synchronous API in a thread pool
+        # 3. Call the synchronous API in a thread pool
         logger.info(f"{log_prefix} 🤖 Calling LLM with tools...")
 
         first_response = await run_in_threadpool(
@@ -240,29 +417,8 @@ async def generate_response(
             response_text = first_response['content']
             logger.info(f"{log_prefix} ✅ Generated response without RAG")
         
-        if not response_text:
-            logger.error(f"{log_prefix} ❌ LLM returned empty response!")
-            response_text = "I apologize, but I wasn't able to generate a response. Please try again."
-
-        response_text = clean_thinking_tags(response_text)
-
-        # 6. Prepare and append the assistant's response
-        assistant_message = HistoryMessage(
-            session_id=chat_id,
-            role="assistant",
-            content=response_text
-        )
-
-        await run_in_threadpool(
-            MONGO_CHAT_CLIENT.save_messages, 
-            chat_id, 
-            user_id, 
-            [user_message, assistant_message]
-        )
-        
-        logger.info(f"{log_prefix} Successfully generated and stored response.")
         return response_text
-
+        
     except (ConnectionError, RuntimeError) as e:
         error_message = HistoryMessage(
             session_id=chat_id,

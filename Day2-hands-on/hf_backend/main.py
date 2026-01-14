@@ -245,7 +245,8 @@ async def chat_prompt(
     token_user_id: str = Depends(get_current_user_id),
     chat_id: Optional[str] = Header(None, alias="chat-id"),
     x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
-    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID")
+    x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
+    use_langchain: bool = True 
 ):
     """Receives the user prompt and returns the LLM response."""
     
@@ -263,7 +264,8 @@ async def chat_prompt(
         chat_id=chat_id,
         prompt=request.prompt,
         request_id=x_request_id,
-        correlation_id=x_correlation_id
+        correlation_id=x_correlation_id,
+        use_langchain=use_langchain
     )
 
     return InferenceResponse(response=response_text)
