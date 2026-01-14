@@ -303,7 +303,8 @@ async def get_chat_history(
     logger.info(f"{log_prefix} Retrieved {len(history_list)} messages (limit={limit}, cursor={cursor})")
     return HistoryResponse(
             history=history_list,
-            has_more=len(history_list) == limit  # Best guess
+            next_cursor=next_cursor,
+            has_more=has_more # Best guess
         )
 
 @app.delete("/chat/history/clear")
