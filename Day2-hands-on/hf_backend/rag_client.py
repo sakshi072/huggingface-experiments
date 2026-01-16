@@ -42,12 +42,15 @@ class RAGClient:
         """
         try:
             headers = await self._get_headers()
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.post(
                     f"{self.rag_url}/search",
                     json={"query":query, "top_k":top_k},
                     headers=headers
                 )
+
+                response.raise_for_status()
 
                 if response.status_code == 200:
                     data = response.json()

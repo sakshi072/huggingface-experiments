@@ -11,13 +11,17 @@ from .rag_client import get_rag_client, get_rag_tool_definition, format_tool_res
 import json
 import re
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
-from .langchain_rag_tool import get_rag_tool
+from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
+from .langchain_rag_tool import search_knowledge_base
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from .web_search_client import search_web
+from .job_search_tool import get_job_search_tool
+from .token_tracker import SimpleTokenTracker
+from.log_llm_request import RequestLogger
 
 load_dotenv()
 
@@ -146,7 +150,10 @@ async def _generate_response_with_langchain(
     log_prefix:str
 ) -> str:
     """
-    Generate response using LangChain agent
+    Enhanced LangChain agent with job search capability
+    
+    This is an enhanced version of your existing _generate_response_with_langchain
+    that includes the job search tool alongside your RAG tool.
     
     Args:
         chat_id: Chat session ID
@@ -159,6 +166,8 @@ async def _generate_response_with_langchain(
     """
     logger.info(f"{log_prefix} 🦜 Using LangChain agent...")
 
+    token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
+
     # 1. Convert MongoDB history to LangChain format
     langchain_history = _convert_mongo_to_langchain(mongo_history)
 
@@ -167,34 +176,53 @@ async def _generate_response_with_langchain(
         model="gpt-4o-mini",
         temperature=TEMPERATURE,
         max_tokens=MAX_TOKENS,
-        openai_api_key=os.getenv("OPENAI_API_KEY")
+        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        callbacks=[token_tracker, RequestLogger()]
     )
 
-    # 3. Get RAG tool (reuses your existing RAG client!)
-    rag_tool = get_rag_tool()
+    # 3. Get tools - Both RAG and Job Search
+    job_search_tool = get_job_search_tool(web_search_function=search_web)
 
-    # 4. Create agent prompt
+    tools = [search_knowledge_base, job_search_tool]
+
+    # 3. Create agent prompt
     agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", SYSTEM_MESSAGE_INFERENCE.get("content", "You are a helpful assistant.")),
+        ("system", """You are HUGG, an intelligent career assistant with access to:
+
+1. **Knowledge Base Search** - Search company documents, policies, and internal knowledge
+2. **Job Search** - Find real-time job listings from across the web
+
+When the user asks about jobs, careers, or hiring:
+- Use the job search tool to find relevant opportunities
+- Analyze the results and provide insights
+- Highlight the most relevant matches
+- Explain why certain jobs are good fits
+
+When the user asks about company information or policies:
+- Use the knowledge base search tool
+
+Always be helpful, accurate, and provide actionable guidance."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
     ])
 
-    # 5. Create agent
+    # 4. Create agent
     agent = create_openai_tools_agent(
         llm=llm,
-        tools = [rag_tool],
+        tools = tools,
         prompt=agent_prompt
     )
 
     # 6. Create executor
     executor = AgentExecutor(
         agent=agent,
-        tools=[rag_tool],
+        tools=tools,
         verbose=True,
-        max_iterations=5,
-        return_intermediate_steps=True
+        max_iterations=2,
+        early_stopping_method="generate",
+        return_intermediate_steps=True,
+        callbacks=[token_tracker]
     )
 
     # 7. Execute with history from MongoDB
@@ -203,15 +231,28 @@ async def _generate_response_with_langchain(
             "input":prompt,
             "chat_history": langchain_history,
             "current_date": datetime.now().strftime("%y-%m-%d")
-        }
+        },
+        config={"callbacks": [token_tracker]}
     )
 
     # 8. Extract response
     response_text = result["output"]
     steps = result.get("intermediate_steps", [])
-    tool_calls = len([s for s in steps if s[0].tool == "search_knowledge_base"])
+    rag_calls = len([s for s in steps if s[0].tool == "search_knowledge_base"])
+    job_calls = len([s for s in steps if s[0].tool == "search_web"])
 
-    logger.info(f"{log_prefix} ✅ LangChain generated response (RAG calls: {tool_calls})")
+    logger.info(
+        f"{log_prefix} ✅ Agent response generated "
+        f"(RAG calls: {rag_calls}, Job searches: {job_calls})"
+    )
+
+    # Log token usage from tracker
+    totals = token_tracker.get_totals()
+    logger.info(
+        f"{log_prefix} 📊 Token usage: "
+        f"{totals['input_tokens']} in + {totals['output_tokens']} out = "
+        f"{totals['total_tokens']} total"
+    )
 
     return clean_thinking_tags(response_text)
 
@@ -418,7 +459,7 @@ async def _generate_response_original(
             logger.info(f"{log_prefix} ✅ Generated response without RAG")
         
         return response_text
-        
+
     except (ConnectionError, RuntimeError) as e:
         error_message = HistoryMessage(
             session_id=chat_id,

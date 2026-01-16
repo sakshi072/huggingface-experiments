@@ -1,31 +1,19 @@
 """
-LangChain RAG Tool
+LangChain RAG Tool using @tool decorator
 
-Wraps your existing RAG service as a LangChain tool
+Simpler, cleaner implementation wrapping your existing RAG service
 """
 import logging
-from typing import List,Dict,Optional
-
-from langchain.tools import BaseTool
-from pydantic import BaseModel, Field
+from langchain.tools import tool
 from .rag_client import get_rag_client
 
 logger = logging.getLogger(__name__)
 
-class RAGSearchInput(BaseModel):
-    """Input schema for RAG search tool"""
-    query:str = Field(description="The search qyery to find relevant documents")
-    top_k:int = Field(default=3, description="Number of results to return")
 
-class RAGSearchTool(BaseTool):
+@tool
+async def search_knowledge_base(query: str, top_k: int = 3) -> str:
     """
-    RAG Knowledge Base Search Tool
-    
-    Allows LangChain agents to search your company's knowledge base.
-    """
-
-    name:str = "search_knowledge_base"
-    description:str = """Search the company knowledge base for information.
+    Search the company knowledge base for information.
     
     Use this when you need to:
     - Find company policies, procedures, or documentation
@@ -34,57 +22,58 @@ class RAGSearchTool(BaseTool):
     - Answer questions requiring specific domain knowledge
 
     Input should be a clear, specific search query.
-    Returns relevant document excerpts with sources."""
-
-    args_schema: type[BaseModel] = RAGSearchInput
-
-    def _run(self, query: str, top_k: int = 3) -> str:
-        """Sync implementation required by LangChain"""
-        raise NotImplementedError("Use _arun for this tool")
-
-    async def _arun(self, query:str, top_k:int=3) -> str:
-        """
-        Async search (used by LangChain agents)
+    Returns relevant document excerpts with sources.
+    
+    Args:
+        query: A clear, specific search query to find relevant documents
+        top_k: Number of results to return (default: 3)
+    
+    Returns:
+        Formatted search results with document excerpts and sources
+    
+    Example:
+        search_knowledge_base("What is our vacation policy?", 3)
+    """
+    try:
+        logger.info(f"🔍 Searching knowledge base: '{query}' (top_k={top_k})")
         
-        Args:
-            query: Search query
-            top_k: Number of results
+        # Get RAG client (reuses your existing client)
+        rag_client = get_rag_client()
+        
+        # Search
+        sources = await rag_client.search(query, top_k)
+        
+        if not sources:
+            logger.warning("No sources found")
+            return "No relevant documents found in the knowledge base."
+        
+        # Format results for LLM
+        result = f"Found {len(sources)} relevant documents:\n\n"
+        
+        for i, source in enumerate(sources, 1):
+            filename = source.get('filename', 'Unknown')
+            similarity = source.get('similarity', 0)
+            text = source.get('text', '').strip()
+            file_url = source.get('file_url', '')
             
-        Returns:
-            Formatted search results with sources
-        """
-        try:
-            # Get RAG client
-            rag_client = get_rag_client()
-
-            # Search
-            sources = await rag_client.search(query, top_k)
-
-            if not sources:
-                return "No relevant documents found in the knowledge base."
+            result += f"**Document {i}: {filename}**\n"
+            result += f"Relevance: {similarity:.1%}\n"
             
-            # Format results for LLM
-            result = f"Found {len(sources)} relevant documents:\n\n"
-
-            for i, source in enumerate(sources):
-                filename = source.get('filename', 'Unknown')
-                similarity = source.get('similarity', 0)
-                text = source.get('text', '')
-                file_url = source.get('file_url', '')
-
-                result += f"Document {i}: {filename} (Relevance: {similarity:.0%})\n"
-                if file_url:
-                    result += f"URL: {file_url}\n"
-                result += f"Content: {text}\n\n"
+            if file_url:
+                result += f"URL: {file_url}\n"
             
-            logger.info(f"🔍 RAG tool returned {len(sources)} sources for: {query[:50]}...")
+            result += f"\nContent:\n{text}\n"
+            result += "\n" + "-" * 50 + "\n\n"
+        
+        logger.info(f"✅ Returned {len(sources)} sources for query: {query[:50]}...")
+        return result
+        
+    except Exception as e:
+        logger.error(f"❌ RAG search failed: {e}", exc_info=True)
+        return f"Error searching knowledge base: {str(e)}"
 
-            return result
 
-        except Exception as e:
-            logger.error(f"RAG tool error: {e}")
-            return f"Error searching knowledge base: {str(e)}"
-
-def get_rag_tool() -> RAGSearchTool:
-    """Get RAG search tool instance"""
-    return RAGSearchTool()
+# Optional: Keep backward compatibility
+def get_rag_tool():
+    """Get RAG search tool (for backward compatibility)"""
+    return search_knowledge_base

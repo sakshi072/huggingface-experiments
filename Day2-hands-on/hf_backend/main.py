@@ -13,6 +13,7 @@ from .models import (
 from .config import logger, mongo_manager
 from fastapi.middleware.cors import CORSMiddleware
 from .auth0 import get_current_user_id
+from .log_llm_request import log_request
 
 # ===== APPLICATION LIFECYCLE =====
 
@@ -249,7 +250,7 @@ async def chat_prompt(
     use_langchain: bool = True 
 ):
     """Receives the user prompt and returns the LLM response."""
-    
+    log_request(f"🔵 ENDPOINT HIT: {request.prompt[:50]}")
     x_request_id = x_request_id or str(uuid.uuid4())
     x_correlation_id = x_correlation_id or str(uuid.uuid4())
 
