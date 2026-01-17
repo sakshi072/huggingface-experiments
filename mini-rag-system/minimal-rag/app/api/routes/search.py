@@ -1,0 +1,100 @@
+"""
+Search and query endpoints
+"""
+import time
+import logging
+
+from fastapi import APIRouter, HTTPException, Depends
+
+from app.api.dependencies import get_rag
+from app.core import require_scope, extract_scopes
+from app.schemas import SearchRequest, SearchResponse, SourceReference
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/search", tags=["Query"])
+
+
+@router.post("", response_model=SearchResponse)
+async def search_documents(
+    request: SearchRequest,
+    token: dict = Depends(require_scope("search:knowledge"))
+):
+    """
+    Query the RAG system with semantic search.
+    Search knowledge base (requires 'search:knowledge' scope)
+
+    Process:
+    1. Convert query to embedding
+    2. Search PostgreSQL vector database (pgvector)
+    3. Retrieve top-k most similar chunks
+    4. Return sources with citations
+
+    Parameters:
+    - query: Your question (3-500 characters)
+    - top_k: Number of chunks to retrieve (1-10, default 3)
+
+    Returns:
+    - Source citations with:
+      - Document filename
+      - Similarity score
+      - Text preview
+
+    Security:
+    - Requires valid JWT token
+    - Token must have 'search:knowledge' scope
+    """
+    rag = get_rag()
+    if rag is None:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG system not initialized"
+        )
+
+    try:
+        client_id = token.get("sub", "unknown")
+        scopes = extract_scopes(token)
+
+        logger.info(
+            f"Search request from client: {client_id}, scopes: {scopes}"
+        )
+
+        start_time = time.time()
+
+        result = await rag.search(
+            query_text=request.query,
+            top_k=request.top_k
+        )
+
+        query_time = time.time() - start_time
+
+        # Check if we got results
+        if not result.get("sources"):
+            return SearchResponse(
+                sources=[],
+                query_time=round(query_time, 2)
+            )
+
+        # Format sources
+        sources = [
+            SourceReference(
+                text=source["text"],
+                filename=source["filename"],
+                similarity=round(source["similarity"], 3),
+                file_url=source["file_url"]
+            )
+            for source in result["sources"]
+        ]
+
+        return SearchResponse(
+            sources=sources,
+            query_time=round(query_time, 2)
+        )
+
+    except Exception as e:
+        import traceback
+        logger.error(f"Search error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing query: {str(e)}"
+        )

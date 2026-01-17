@@ -4,18 +4,20 @@ MinIO storage service for document file operations
 import os
 import io
 from datetime import datetime, timedelta
-from typing import Optional, BinaryIO
+from typing import Optional
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from minio import Minio
 from minio.error import S3Error
+import logging
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 class StorageService:
     """Service for managing document storage in MinIO"""
-    
+
     def __init__(self):
         """Initialize MinIO client"""
         self.endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
@@ -27,9 +29,9 @@ class StorageService:
         # Initialize MinIO client
         self.client = Minio(
             self.endpoint,
-            access_key = self.access_key,
-            secret_key = self.secret_key,
-            secure= self.secure
+            access_key=self.access_key,
+            secret_key=self.secret_key,
+            secure=self.secure
         )
 
         # Ensure bucket exists
@@ -37,22 +39,22 @@ class StorageService:
 
     def _ensure_bucket_exists(self):
         """Create bucket if it doesn't exist"""
-        try: 
+        try:
             if not self.client.bucket_exists(self.bucket_name):
                 self.client.make_bucket(self.bucket_name)
-                print(f"✅ Created MinIO bucket: {self.bucket_name}")
+                logger.info(f"Created MinIO bucket: {self.bucket_name}")
         except S3Error as e:
-            print(f"⚠️  Error checking/creating bucket: {e}")
+            logger.error(f"Error checking/creating bucket: {e}")
 
-    def generate_object_key(self, filename:str) -> str:
+    def generate_object_key(self, filename: str) -> str:
         """
         Generate unique object key for file
-        
+
         Format: YYYY/MM/DD/{uuid}_{original_filename}
-        
+
         Args:
             filename: Original filename
-            
+
         Returns:
             Object key (path in MinIO)
         """
@@ -73,15 +75,15 @@ class StorageService:
     ) -> str:
         """
         Upload file to MinIO
-        
+
         Args:
             file_data: File content as bytes
             filename: Original filename
             content_type: MIME type (optional)
-            
+
         Returns:
             Object key (path in MinIO)
-            
+
         Raises:
             S3Error: If upload fails
         """
@@ -115,19 +117,16 @@ class StorageService:
         except S3Error as e:
             raise Exception(f"Failed to upload file to MinIO: {e}")
 
-    def download_file(
-        self,
-        object_key:str
-    ) -> bytes:
+    def download_file(self, object_key: str) -> bytes:
         """
         Download file from MinIO
-        
+
         Args:
             object_key: Object key in MinIO
-            
+
         Returns:
             File content as bytes
-            
+
         Raises:
             S3Error: If download fails
         """
@@ -140,16 +139,16 @@ class StorageService:
         except S3Error as e:
             raise Exception(f"Failed to download file from MinIO: {e}")
 
-    def delete_file(self, object_key:str) -> bool:
+    def delete_file(self, object_key: str) -> bool:
         """
         Delete file from MinIO
-        
+
         Args:
             object_key: Object key in MinIO
-            
+
         Returns:
             True if successful
-            
+
         Raises:
             S3Error: If deletion fails
         """
@@ -159,13 +158,13 @@ class StorageService:
         except S3Error as e:
             raise Exception(f"Failed to delete file from MinIO: {e}")
 
-    def file_exists(self, object_key:str) -> bool:
+    def file_exists(self, object_key: str) -> bool:
         """
         Check if file exists in MinIO
-        
+
         Args:
             object_key: Object key in MinIO
-            
+
         Returns:
             True if file exists
         """
@@ -174,21 +173,21 @@ class StorageService:
             return True
         except S3Error:
             return False
-    
-    def get_file_info(self, object_key:str) -> dict:
+
+    def get_file_info(self, object_key: str) -> dict:
         """
         Get file metadata from MinIO
-        
+
         Args:
             object_key: Object key in MinIO
-            
+
         Returns:
             Dictionary with file metadata
         """
         try:
             stat = self.client.stat_object(self.bucket_name, object_key)
             return {
-                "object_key":object_key,
+                "object_key": object_key,
                 "size": stat.size,
                 "last_modified": stat.last_modified,
                 "content_type": stat.content_type,
@@ -197,13 +196,13 @@ class StorageService:
         except S3Error as e:
             raise Exception(f"Failed to get file info from MinIO: {e}")
 
-    def list_files(self, prefix:str = "") -> list[dict]:
+    def list_files(self, prefix: str = "") -> list[dict]:
         """
         List files in bucket
-        
+
         Args:
             prefix: Filter by prefix (optional)
-            
+
         Returns:
             List of file metadata dictionaries
         """
@@ -223,19 +222,19 @@ class StorageService:
             ]
         except S3Error as e:
             raise Exception(f"Failed to list files from MinIO: {e}")
-    
+
     def get_presigned_url(
         self,
-        object_key:str,
-        expiray_seconds:int = 3600
+        object_key: str,
+        expiry_seconds: int = 3600
     ) -> str:
         """
         Generate a presigned URL for temporary file access
-        
+
         Args:
             object_key: Object key in MinIO
             expiry_seconds: URL expiration time in seconds (default 1 hour)
-            
+
         Returns:
             Presigned URL (valid for specified duration)
         """
@@ -243,11 +242,12 @@ class StorageService:
             url = self.client.presigned_get_object(
                 self.bucket_name,
                 object_key,
-                expires=timedelta(seconds=expiray_seconds)
+                expires=timedelta(seconds=expiry_seconds)
             )
             return url
         except S3Error as e:
             raise Exception(f"Failed to generate presigned URL: {e}")
+
 
 # Global storage service instance
 storage_service = StorageService()

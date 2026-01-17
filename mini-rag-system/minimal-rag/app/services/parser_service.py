@@ -14,11 +14,14 @@ from typing import Dict, Any
 import pypdf
 import pdfplumber
 from docx import Document
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DocumentParser:
     """
     Parse different document formats and extract text + metadata.
-    
+
     Supported formats: PDF, DOCX, TXT, MD
     """
 
@@ -26,12 +29,12 @@ class DocumentParser:
     def parse_pdf(file_data: bytes) -> Dict[str, Any]:
         """
         Parse PDF file to extract text and metadata.
-        
+
         Uses pypdf for speed, falls back to pdfplumber for complex PDFs.
-        
+
         Args:
             file_data: PDF file as bytes
-            
+
         Returns:
             Dictionary with 'text' and 'metadata'
         """
@@ -52,7 +55,7 @@ class DocumentParser:
 
             # If extraction is poor, try pdfplumber
             if len(extracted_text.strip()) < 100:
-                print("   ⚠️  pypdf extraction insufficient, trying pdfplumber...")
+                logger.warning("   pypdf extraction insufficient, trying pdfplumber...")
                 pdf_file = BytesIO(file_data)
                 with pdfplumber.open(pdf_file) as pdf:
                     text_parts = []
@@ -88,23 +91,23 @@ class DocumentParser:
     def parse_docx(file_data: bytes) -> Dict[str, Any]:
         """
         Parse DOCX file to extract text and metadata.
-        
+
         Args:
             file_data: DOCX file as bytes
-            
+
         Returns:
             Dictionary with 'text' and 'metadata'
-        """ 
+        """
         try:
             docx_file = BytesIO(file_data)
             doc = Document(docx_file)
 
-            #Extract paragraphs
+            # Extract paragraphs
             text_parts = []
             for para in doc.paragraphs:
                 if para.text.strip():
                     text_parts.append(para.text)
-            
+
             # Extract tables
             for table in doc.tables:
                 table_text = []
@@ -114,7 +117,7 @@ class DocumentParser:
                         table_text.append(row_text)
                 if table_text:
                     text_parts.append("\n".join(table_text))
-            
+
             extracted_text = "\n\n".join(text_parts)
 
             metadata = {
@@ -130,7 +133,7 @@ class DocumentParser:
                 metadata["title"] = doc.core_properties.title or "Untitled"
                 if doc.core_properties.created:
                     metadata["created"] = str(doc.core_properties.created)
-            
+
             # Clean the text
             cleaned_text = DocumentParser.clean_text(extracted_text)
 
@@ -140,16 +143,16 @@ class DocumentParser:
             }
 
         except Exception as e:
-            raise ValueError(f"Failed to parse DOCS: {str(e)}")
+            raise ValueError(f"Failed to parse DOCX: {str(e)}")
 
     @staticmethod
     def parse_text(file_data: bytes) -> Dict[str, Any]:
         """
         Parse plain text file.
-        
+
         Args:
             file_data: Text file as bytes
-            
+
         Returns:
             Dictionary with 'text' and 'metadata'
         """
@@ -162,7 +165,7 @@ class DocumentParser:
                 text = file_data.decode('latin-1')
             except Exception as e:
                 raise ValueError(f"Failed to decode text file: {str(e)}")
-            
+
         # Clean the text
         cleaned_text = DocumentParser.clean_text(text)
 
@@ -181,10 +184,10 @@ class DocumentParser:
     def parse_markdown(file_data: bytes) -> Dict[str, Any]:
         """
         Parse Markdown file.
-        
+
         Args:
             file_data: Markdown file as bytes
-            
+
         Returns:
             Dictionary with 'text' and 'metadata'
         """
@@ -192,46 +195,46 @@ class DocumentParser:
         result = DocumentParser.parse_text(file_data)
         result["metadata"]["format"] = "md"
         return result
-    
+
     @staticmethod
-    def clean_text(text:str) -> str:
+    def clean_text(text: str) -> str:
         """
         Clean and normalize extracted text.
-        
+
         Args:
             text: Raw extracted text
-            
+
         Returns:
             Cleaned text
         """
         if not text:
             return ""
-        
+
         # Normalize whitespace
         text = re.sub(r'[ \t]+', ' ', text)  # Multiple spaces to single
         text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)  # Multiple newlines to double
-        
+
         # Remove common PDF artifacts
         text = re.sub(r'\x00', '', text)  # Null characters
         text = re.sub(r'[\x01-\x08\x0B-\x0C\x0E-\x1F]', '', text)  # Control chars
-        
+
         # Clean up page breaks (but keep page markers)
         text = re.sub(r'\n\s*\n\[Page (\d+)\]\s*\n\s*\n', r'\n\n[Page \1]\n\n', text)
-        
+
         return text.strip()
 
     @staticmethod
     def parse(file_data: bytes, file_type: str) -> Dict[str, Any]:
         """
         Parse document based on file type.
-        
+
         Args:
             file_data: File content as bytes
             file_type: File extension (.pdf, .docx, .txt, .md)
-            
+
         Returns:
             Dictionary with 'text' and 'metadata'
-            
+
         Raises:
             ValueError: If file type is unsupported or parsing fails
         """
@@ -249,16 +252,16 @@ class DocumentParser:
 
         # Normalize file type
         file_type = file_type.lower().lstrip()
-        print(file_type)
+
         # Get parser
         parser = parsers.get(f"{file_type}")
         if not parser:
             raise ValueError(
-                f"Unsupported file type: {file_type}."
+                f"Unsupported file type: {file_type}. "
                 f"Supported: {list(set(k.lstrip('.') for k in parsers.keys()))}"
             )
 
-        # Parse 
+        # Parse
         result = parser(file_data)
 
         # Validate extraction
@@ -267,5 +270,5 @@ class DocumentParser:
                 "Extracted text is too short. File may be empty, corrupted, "
                 "or contain only images (OCR not supported)."
             )
-        
+
         return result

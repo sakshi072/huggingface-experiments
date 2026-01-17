@@ -1,7 +1,7 @@
 -- create_user.sql - Create rag_user and grant permissions
 
 -- Create rag_user
-CREATE USER rag_user WITH PASSWORD '******';
+CREATE USER rag_user WITH PASSWORD 'rag_password';
 
 -- Grant superuser privileges (for development)
 ALTER USER rag_user WITH SUPERUSER;
