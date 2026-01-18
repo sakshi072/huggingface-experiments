@@ -184,7 +184,7 @@ def get_search_client(provider:str ="tavily") -> WebSearchClient:
     
     return _search_client
 
-async def search_web(query: str, max_results: int = 5) -> List[Dict]:
+async def search_web(query: str, max_results: int = 20) -> List[Dict]:
     """
     Convenience function for web search
     

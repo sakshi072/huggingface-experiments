@@ -1,0 +1,79 @@
+# docker-compose.yml
+
+version: '3.8'
+
+services:
+  # Backend Services
+  backend:
+    build:
+      context: ./hf_backend
+      dockerfile: Dockerfile
+    container_name: hugg-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment: 
+      RAG_SERVICE_URL: http://host.docker.internal:8001
+      # MongoDB - Uses Atlas URI from .env
+      MONGO_URI: ${MONGO_URI}
+      MONGO_DB_NAME: ${MONGO_DB_NAME}
+      MONGO_MAX_POOL_SIZE: ${MONGO_MAX_POOL_SIZE:-50}
+      MONGO_MIN_POOL_SIZE: ${MONGO_MIN_POOL_SIZE:-10}
+
+      # Auth0 - All from .env
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+
+      # AI Services - From .env
+      HF_TOKEN: ${HF_TOKEN}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+
+      # M2M Auth0 (for RAG service) - From .env
+      CLIENT_ID: ${CLIENT_ID}
+      CLIENT_SECRET: ${CLIENT_SECRET}
+      AUDIENCE: ${AUDIENCE}
+    networks:
+      - hugg-network
+    volumes:
+      - .:/app
+    working_dir: /app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./hf-frontend
+      dockerfile: Dockerfile
+    container_name: hugg-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    environment:
+      # Auth0 Configuration - All from .env
+      VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN}
+      VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID}
+      VITE_AUTH0_AUDIENCE: ${VITE_AUTH0_AUDIENCE}
+      VITE_AUTH0_REDIRECT_URI: ${VITE_AUTH0_REDIRECT_URI:-http://localhost:5173}
+      
+      # Backend API - From .env
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - backend
+    networks:
+      - hugg-network
+    volumes:
+      - ./hf-frontend:/app
+      - /app/node_modules
+
+networks:
+  hugg-network:
+    driver: bridge
+
+# Note: No volumes needed since we're using MongoDB Atlas

@@ -22,6 +22,7 @@ from .web_search_client import search_web
 from .job_search_tool import get_job_search_tool
 from .token_tracker import SimpleTokenTracker
 from.log_llm_request import RequestLogger
+from langfuse.langchain import CallbackHandler
 
 load_dotenv()
 
@@ -167,6 +168,9 @@ async def _generate_response_with_langchain(
     logger.info(f"{log_prefix} 🦜 Using LangChain agent...")
 
     token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
+    
+    # Observability
+    langfuse_handler = CallbackHandler()
 
     # 1. Convert MongoDB history to LangChain format
     langchain_history = _convert_mongo_to_langchain(mongo_history)
@@ -187,21 +191,11 @@ async def _generate_response_with_langchain(
 
     # 3. Create agent prompt
     agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are HUGG, an intelligent career assistant with access to:
-
-1. **Knowledge Base Search** - Search company documents, policies, and internal knowledge
-2. **Job Search** - Find real-time job listings from across the web
-
-When the user asks about jobs, careers, or hiring:
-- Use the job search tool to find relevant opportunities
-- Analyze the results and provide insights
-- Highlight the most relevant matches
-- Explain why certain jobs are good fits
-
-When the user asks about company information or policies:
-- Use the knowledge base search tool
-
-Always be helpful, accurate, and provide actionable guidance."""),
+        ("system", """You are HUGG, an assistant.                                                                                                                                                                                        
+  - search_knowledge_base: internal documents, company policies, uploaded files                                                                                                                                                 
+  - search_jobs: job openings, career opportunities                                                                                                                                                                        
+  - No tool: greetings, general questions, follow-ups on previous results                                                                                                                                                  
+  Respond concisely. """),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
@@ -220,7 +214,7 @@ Always be helpful, accurate, and provide actionable guidance."""),
         tools=tools,
         verbose=True,
         max_iterations=2,
-        early_stopping_method="generate",
+        early_stopping_method="force",
         return_intermediate_steps=True,
         callbacks=[token_tracker]
     )
@@ -232,14 +226,14 @@ Always be helpful, accurate, and provide actionable guidance."""),
             "chat_history": langchain_history,
             "current_date": datetime.now().strftime("%y-%m-%d")
         },
-        config={"callbacks": [token_tracker]}
+        config={"callbacks": [token_tracker, langfuse_handler]}
     )
 
     # 8. Extract response
     response_text = result["output"]
     steps = result.get("intermediate_steps", [])
     rag_calls = len([s for s in steps if s[0].tool == "search_knowledge_base"])
-    job_calls = len([s for s in steps if s[0].tool == "search_web"])
+    job_calls = len([s for s in steps if s[0].tool == "search_jobs"])
 
     logger.info(
         f"{log_prefix} ✅ Agent response generated "
@@ -295,12 +289,12 @@ async def generate_response(
             detail="Unauthorized access to chat session"
         )
 
-    # 2. Get recent history for context (fetch enough for context window)
+    # 2. Get recent history for context (token-optimized: limit to recent messages)
     # Using cursor=None to get most recent messages
     history_messages, _, _ = await run_in_threadpool(
-        MONGO_CHAT_CLIENT.get_history, 
+        MONGO_CHAT_CLIENT.get_history,
         chat_id,
-        limit=50,
+        limit=15,  # Reduced from 50 to save tokens
         cursor=None
     )
 

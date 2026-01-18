@@ -18,10 +18,10 @@ logger = logging.getLogger("HuggBackend")
 load_dotenv()
 # --- Configuration ---
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-# MODEL_ID = "deepseek-ai/DeepSeek-R1-0528"
-MODEL_ID = "gpt-4o"
+MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
+# MODEL_ID = "gpt-4o"
 API_BASE_URL = "https://router.huggingface.co/v1/"
-MAX_TOKENS = 2048
+MAX_TOKENS = 1024
 TEMPERATURE = 0.7
 
 # --- MongoDB Configuration ---
@@ -207,11 +207,11 @@ def initialize_hf_client() -> InferenceClient | None:
         return None
 
     try:
-        # client = InferenceClient(
-        #     base_url=API_BASE_URL,
-        #     api_key=HF_TOKEN
-        # )
-        client = OpenAI()
+        client = InferenceClient(
+            base_url=API_BASE_URL,
+            api_key=HF_TOKEN
+        )
+        # client = OpenAI()
         logger.info("Hugging Face InferenceClient initialized.")
         return client
     except Exception as e:

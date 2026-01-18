@@ -10,6 +10,8 @@ Features:
 
 import logging
 import json
+import asyncio
+import os
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
@@ -18,6 +20,7 @@ from langchain.tools import BaseTool
 from sentence_transformers import SentenceTransformer
 from numpy import dot
 from numpy.linalg import norm
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +28,17 @@ class JobSearchInput(BaseModel):
     """Input schema for job search tool"""
 
     query: str = Field(
-        description="Job search query with role, location, skills, etc. "
-        "Example: 'senior backend engineer Python remote' or 'ML engineer NYC'"
+        description="Job search query (role, location, skills). E.g. 'Python engineer remote'"
     )
     time_window_hours: int = Field(
-        default=48,
-        description="How recent the jobs should be (in hours). Default: 48 hours"
+        default=72,
+        description="Recency filter in hours. Default: 72"
     )
     max_results: int = Field(
-        default=10,
+        default=5,
         ge=1,
-        le=50,
-        description="Maximum number of jobs to return after reranking"
+        le=20,
+        description="Max jobs to return. Default: 5"
     )
 
 class JobListing(BaseModel):
@@ -68,22 +70,7 @@ class JobSearchTool(BaseTool):
     """
 
     name: str = "search_jobs"
-    description: str = """Search for job listings in real-time based on role, skills, and preferences.
-    
-    Use this when the user wants to:
-    - Find job openings
-    - Search for specific roles or positions
-    - Look for jobs with certain skills or technologies
-    - Filter by location, remote work, or time posted
-    
-    The tool returns recent job listings ranked by relevance to the search query.
-    
-    Input should include:
-    - Role/position (e.g., "backend engineer", "data scientist")
-    - Skills/technologies (e.g., "Python", "React", "AWS")
-    - Location preferences (e.g., "NYC", "remote", "San Francisco")
-    - Other preferences (e.g., "startup", "senior level")
-    """
+    description: str = """Search real-time job listings by role, skills, location. Returns ranked results with relevance scores."""
 
     args_schema: type[BaseModel] = JobSearchInput
 
@@ -117,11 +104,11 @@ class JobSearchTool(BaseTool):
 
         logger.info("✅ Job search tool initialized")
     
-    def _run(self, query: str, time_window_hours: int = 168, max_results: int = 5) -> str:
+    def _run(self, query: str, time_window_hours: int = 72, max_results: int = 5) -> str:
         """Sync implementation - not used in async context"""
         raise NotImplementedError("Use _arun for async execution")
-    
-    async def _arun(self, query: str, time_window_hours: int = 168, max_results: int = 5) -> str:
+
+    async def _arun(self, query: str, time_window_hours: int = 72, max_results: int = 5) -> str:
         """
         Execute job search with semantic matching
         
@@ -353,38 +340,32 @@ class JobSearchTool(BaseTool):
 
     def _format_results(self, jobs: List[JobListing], query: str) -> str:
         """
-        Format job results for LLM consumption
-        
-        Returns a structured string the LLM can understand and present to user
+        Format job results for LLM consumption (token-optimized)
+
+        Uses compact JSON format to minimize token usage while preserving all key data.
         """
         if not jobs:
-            return f"No jobs found matching '{query}'"
-        
-        result = f"Found {len(jobs)} job opportunities matching '{query}':\n\n"
+            return f"No jobs found for '{query}'"
 
-        for i, job in enumerate(jobs, 1):
-            result += f"**Job {i}:** {job.title}\n"
-            result += f"**Company:** {job.company}\n"
-            result += f"**Location:** {job.location}\n"
-
+        # Compact JSON format - much more token-efficient than markdown
+        compact_jobs = []
+        for job in jobs:
+            compact_job = {
+                "title": job.title[:80],  # Truncate long titles
+                "company": job.company[:40],
+                "location": job.location,
+                "url": job.url,
+                "snippet": job.snippet[:100],  # Reduced from 200
+                "score": round(job.relevance_score or 0, 2)
+            }
+            # Only include optional fields if present
             if job.job_type:
-                result += f"**Type:** {job.job_type}\n"
-            
+                compact_job["type"] = job.job_type
             if job.salary:
-                result += f"**Salary:** {job.salary}\n"
-            
-            result += f"**Relevance Score:** {job.relevance_score:.2%}\n"
-            result += f"**Description:** {job.snippet[:200]}...\n"
-            result += f"**Apply:** {job.url}\n"
-            result += "\n" + "="*60 + "\n\n"
-        
-        # Add summary footer
-        result += "\n**Search Summary:**\n"
-        result += f"- Total jobs: {len(jobs)}\n"
-        result += f"- Highest relevance: {jobs[0].relevance_score:.2%}\n"
-        result += f"- Average relevance: {sum(j.relevance_score or 0 for j in jobs) / len(jobs):.2%}\n"
-        
-        return result
+                compact_job["salary"] = job.salary
+            compact_jobs.append(compact_job)
+
+        return json.dumps({"query": query, "count": len(jobs), "jobs": compact_jobs})
 
 
 def get_job_search_tool(web_search_function) -> JobSearchTool:
