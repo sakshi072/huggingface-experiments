@@ -3,9 +3,6 @@
 -- Create rag_user
 CREATE USER rag_user WITH PASSWORD 'rag_password';
 
--- Grant superuser privileges (for development)
-ALTER USER rag_user WITH SUPERUSER;
-
 -- Grant all privileges on database
 GRANT ALL PRIVILEGES ON DATABASE rag_db TO rag_user;
 
