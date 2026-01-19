@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, HTTPException, Depends
 
-from app.api.dependencies import get_rag
+from app.api.dependencies import get_vectore_storage_retrieval
 from app.core import require_scope, extract_scopes
 from app.schemas import SearchRequest, SearchResponse, SourceReference
 
@@ -21,7 +21,7 @@ async def search_documents(
     token: dict = Depends(require_scope("search:knowledge"))
 ):
     """
-    Query the RAG system with semantic search.
+    Query the Vector Storage and Retrieval system with semantic search.
     Search knowledge base (requires 'search:knowledge' scope)
 
     Process:
@@ -44,11 +44,11 @@ async def search_documents(
     - Requires valid JWT token
     - Token must have 'search:knowledge' scope
     """
-    rag = get_rag()
-    if rag is None:
+    vectore_storage_retrieval = get_vectore_storage_retrieval()
+    if vectore_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system not initialized"
         )
 
     try:
@@ -61,7 +61,7 @@ async def search_documents(
 
         start_time = time.time()
 
-        result = await rag.search(
+        result = await vectore_storage_retrieval.search(
             query_text=request.query,
             top_k=request.top_k
         )

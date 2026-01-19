@@ -1,5 +1,5 @@
 """
-FastAPI REST API for Mini RAG System
+FastAPI REST API for Vector Storage and Retrieval System
 
 Run: uvicorn app.main:app --reload
 Access: http://localhost:8001/docs
@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse
 from app.db import startup_database, shutdown_database
 from app.services import KnowledgeBase
 from app.schemas import ErrorResponse
-from app.api.dependencies import set_rag
+from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
 import logging
 
@@ -28,25 +28,25 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown."""
     # Startup
-    logger.info("Starting Mini RAG API...")
+    logger.info("Starting Vector Storage and Retrieval API...")
 
     try:
         # Initialize database
         await startup_database()
 
-        # Initialize RAG system
-        rag = KnowledgeBase()
-        set_rag(rag)
-        logger.info("RAG system initialized successfully")
+        # Initialize Vector Storage and Retrieval system
+        vector_storage_retrieval = KnowledgeBase()
+        set_vectore_storage_retrieval(vector_storage_retrieval)
+        logger.info("Vector Storage and Retrieval system initialized successfully")
 
     except Exception as e:
-        logger.error(f"Failed to initialize RAG: {e}")
+        logger.error(f"Failed to initialize Vector Storage and Retrieval system: {e}")
         raise
 
     yield
 
     # Shutdown
-    logger.info("Shutting down Mini RAG API...")
+    logger.info("Shutting down Vector Storage and Retrieval API...")
     await shutdown_database()
     logger.info("Shutdown complete")
 
@@ -56,21 +56,12 @@ async def lifespan(app: FastAPI):
 # ============================================================================
 
 app = FastAPI(
-    title="Mini RAG API",
-    description="Semantic search RAG system with document upload and querying and OAuth 2.0 authentication",
+    title="Vector Storage and Retrieval API",
+    description="Semantic search Vector Storage and Retrieval system with document upload and querying and OAuth 2.0 authentication",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
 )
 
 # Include routers
@@ -93,12 +84,3 @@ async def global_exception_handler(request: Request, exc: Exception):
             detail=str(exc)
         ).model_dump()
     )
-
-
-# ============================================================================
-# Run with: uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-# ============================================================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8001, reload=True)

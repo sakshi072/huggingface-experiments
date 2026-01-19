@@ -17,7 +17,7 @@ from app.db.database import Base
 
 
 class Domain(Base):
-    """Domain/Tenant table for multi-domain RAG"""
+    """Domain/Tenant table for multi-domain Vector Storage and Retrieval System"""
     __tablename__ = "domains"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)

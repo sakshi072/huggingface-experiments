@@ -3,7 +3,7 @@ Health and system status endpoints
 """
 from fastapi import APIRouter, HTTPException
 
-from app.api.dependencies import get_rag
+from app.api.dependencies import get_vectore_storage_retrieval
 from app.schemas import HealthResponse, StatResponse
 
 router = APIRouter(prefix="", tags=["System"])
@@ -13,7 +13,7 @@ router = APIRouter(prefix="", tags=["System"])
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Mini RAG API",
+        "message": "Vector Storage and Retrieval system API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",
@@ -42,19 +42,19 @@ async def health_check():
     Health check endpoint.
 
     Checks status of:
-    - RAG system
+    - Vector Storage and Retrieval system
     - PostgreSQL database
     - MinIO storage
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
             detail="RAG system not initialized"
         )
 
     components = {
-        "rag": "ok",
+        "vector_storage_retrieval": "ok",
         "postgres": "ok",
         "minio": "ok"
     }
@@ -75,15 +75,15 @@ async def get_stats():
     - Total chunks
     - Documents by status (processing, completed, failed)
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = vector_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system system not initialized"
         )
 
     try:
-        stats = await rag.get_stats()
+        stats = await vector_storage_retrieval.get_stats()
 
         return StatResponse(
             total_documents=stats["total_documents"],

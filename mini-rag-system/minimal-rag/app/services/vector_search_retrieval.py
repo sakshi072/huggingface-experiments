@@ -1,5 +1,5 @@
 """
-Production RAG Knowledge Base Service
+Production Vector Storage and Retrieval - Knowledge Base Service
 
 Features:
 1. Domain-aware document ingestion
@@ -39,11 +39,11 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
 class KnowledgeBase:
-    """RAG system for semantic search and document retrieval."""
+    """Vector Storage and Retrieval system for semantic search and document retrieval."""
 
     def __init__(self, reranker_config: RerankerConfig = None):
         """Initialize components."""
-        logger.info("Initializing RAG System...")
+        logger.info("Initializing Vector Storage and Retrieval System...")
         logger.info(f"Feature Flags: {feature_flags}")
 
         # Embedding model (runs locally, no API needed)
@@ -628,7 +628,7 @@ class KnowledgeBase:
             return True
 
     async def get_stats(self) -> Dict:
-        """Get RAG system statistics"""
+        """Get Vector Storage and Retrieval system statistics"""
         async with db_manager.session() as session:
             # Count documents
             doc_result = await session.execute(

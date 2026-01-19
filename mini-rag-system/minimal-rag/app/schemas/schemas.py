@@ -11,13 +11,13 @@ from typing import List, Optional, Dict
 # ============================================================================
 
 class SearchRequest(BaseModel):
-    """Request schema for querying the RAG system."""
+    """Request schema for querying the Vector Storage and Retrieval system."""
 
     query: str = Field(
         ...,
         min_length=3,
         max_length=500,
-        description="Question to ask the RAG system",
+        description="Question to ask the Vector Storage and Retrieval system",
         examples=["What is Machine Learning?"]
     )
 
@@ -66,7 +66,7 @@ class SourceReference(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    """Response schema for RAG query."""
+    """Response schema for Vector Storage and Retrieval System query."""
 
     sources: List[SourceReference] = Field(..., description="Source chunks used")
     query_time: float = Field(..., description="Query processing time in seconds")
@@ -171,7 +171,7 @@ class HealthResponse(BaseModel):
             "example": {
                 "status": "healthy",
                 "components": {
-                    "rag": "ok",
+                    "vector_storage_and_retrieval System": "ok",
                     "postgres": "ok",
                     "minio": "ok",
                     "llm": "ok"

@@ -5,16 +5,16 @@ from typing import Optional
 
 from app.services import KnowledgeBase
 
-# Global RAG instance
-_rag: Optional[KnowledgeBase] = None
+# Global Vector Storage and Retrieval instance
+_vectore_storage_retrieval: Optional[KnowledgeBase] = None
 
 
-def get_rag() -> Optional[KnowledgeBase]:
-    """Get the global RAG instance"""
-    return _rag
+def get_vectore_storage_retrieval() -> Optional[KnowledgeBase]:
+    """Get the global Vector Storage and Retrieval instance"""
+    return _vectore_storage_retrieval
 
 
-def set_rag(rag: KnowledgeBase) -> None:
-    """Set the global RAG instance"""
-    global _rag
-    _rag = rag
+def set_vectore_storage_retrieval(vectore_storage_retrieval: KnowledgeBase) -> None:
+    """Set the global Vector Storage and Retrieval instance"""
+    global _vectore_storage_retrieval
+    _vectore_storage_retrieval = vectore_storage_retrieval

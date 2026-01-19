@@ -1,3 +1,3 @@
 """
-Mini RAG System - A production-ready RAG microservice
+Vector Storage and Retrieval System - A production-ready Vector Storage and Retrieval microservice
 """

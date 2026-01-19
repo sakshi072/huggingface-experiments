@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
-from app.api.dependencies import get_rag
+from app.api.dependencies import get_vectore_storage_retrieval
 from app.schemas import IngestResponse, DocumentMetadata, DocumentListResponse
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -31,11 +31,11 @@ async def ingest_document(file: UploadFile = File(...)):
     - Processing statistics
     - Extracted metadata (pages, author, etc.)
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system not initialized"
         )
 
     # Validate file type
@@ -54,7 +54,7 @@ async def ingest_document(file: UploadFile = File(...)):
         file_data = await file.read()
 
         # Ingest document
-        document_id, is_duplicate = await rag.ingest_file(
+        document_id, is_duplicate = await vector_storage_retrieval.ingest_file(
             file_data=file_data,
             filename=file.filename,
             file_type=file_ext,
@@ -64,7 +64,7 @@ async def ingest_document(file: UploadFile = File(...)):
         processing_time = time.time() - start_time
 
         # Get document details
-        doc = await rag.get_document(document_id)
+        doc = await vector_storage_retrieval.get_document(document_id)
 
         doc_metadata = doc.get("metadata")
         if doc_metadata is not None and not isinstance(doc_metadata, dict):
@@ -107,15 +107,15 @@ async def list_documents(limit: int = 10, skip: int = 0):
     - Chunk count
     - Upload timestamp
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system not initialized"
         )
 
     try:
-        docs = await rag.list_documents(limit=limit + skip)
+        docs = await vector_storage_retrieval.list_documents(limit=limit + skip)
 
         docs = docs[skip:skip + limit]
 
@@ -152,17 +152,17 @@ async def get_document(document_id: str):
     - Chunk count
     - Extracted metadata (pages, author, etc.)
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system not initialized"
         )
 
     try:
         doc_uuid = UUID(document_id)
 
-        doc = await rag.get_document(doc_uuid)
+        doc = await vector_storage_retrieval.get_document(doc_uuid)
 
         if doc is None:
             raise HTTPException(
@@ -196,17 +196,17 @@ async def delete_document(document_id: str):
 
     Returns success status.
     """
-    rag = get_rag()
-    if rag is None:
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="Vector Storage and Retrieval system not initialized"
         )
 
     try:
         doc_uuid = UUID(document_id)
 
-        deleted = await rag.delete_document(doc_uuid)
+        deleted = await vector_storage_retrieval.delete_document(doc_uuid)
 
         if not deleted:
             raise HTTPException(
