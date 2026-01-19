@@ -108,8 +108,8 @@ class WebSearchClient:
                         "max_results": max_results,
                         "search_depth": search_depth,
                         "include_answer": False,
-                        "include_raw_content": False,
-                        "include_images": False
+                        "include_raw_content": True,
+                        "include_images": False,
                     }
                 )
 
@@ -117,17 +117,17 @@ class WebSearchClient:
                 data = response.json()
                 logger.info(f"in tavily: {data}")
                 # Parse Tavily results
-                results = []
-                for item in data.get("results", []):
-                    results.append({
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "snippet": item.get("content", ""),
-                        "score": item.get("score", 0)
-                    })
+                # results = []
+                # for item in data.get("results", []):
+                #     results.append({
+                #         "title": item.get("title", ""),
+                #         "url": item.get("url", ""),
+                #         "snippet": item.get("content", ""),
+                #         "score": item.get("score", 0)
+                #     })
 
-                logger.info(f"✅ Tavily returned {len(results)} results")
-                return results
+                logger.info(f"✅ Tavily returned {len(data.get("results", []))} results")
+                return data.get("results", [])
         except httpx.HTTPError as e:
             logger.error(f"❌ Tavily search failed: {e}")
             return []

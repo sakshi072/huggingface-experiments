@@ -12,6 +12,16 @@ from .database import (
     ChatMetadataDocument,
 )
 
+from .supervisor import (
+    SupervisorState
+)
+
+from .job_search import (
+    JobListing,
+    JobSearchState,
+    ExpandedQueryList
+)
+
 from .api import (
     ChatPrompt,
     InferenceResponse,
@@ -47,4 +57,9 @@ __all__ = [
     "GenerateTitleResponse",
     "PaginationParams",
     "HealthCheckResponse",
+    # LangGraph models
+    "SupervisorState",
+    "JobListing",
+    "JobSearchState",
+    "ExpandedQueryList"
 ]

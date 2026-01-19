@@ -10,6 +10,7 @@ from models import (
 )
 from services import (
     generate_response,
+    execute_supervisor_workflow,
     get_history,
     clear_history,
     generate_smart_title,
@@ -17,6 +18,7 @@ from services import (
 )
 from api.dependencies import get_current_user_id
 from infrastructure.observability.request_logger import log_request
+from workflows import create_supervisor_graph
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger("HuggBackend")
@@ -77,13 +79,12 @@ async def chat_prompt(
     log_prefix = f"[RID:{x_request_id[:8]}] [CID:{x_correlation_id[:8]}]"
     logger.info(f"{log_prefix} Received prompt from user {token_user_id[:8]}... chat {chat_id[:8]}...")
 
-    response_text = await generate_response(
+    response_text = await execute_supervisor_workflow(
         user_id=token_user_id,
         chat_id=chat_id,
         prompt=request.prompt,
         request_id=x_request_id,
         correlation_id=x_correlation_id,
-        use_langchain=use_langchain
     )
 
     return InferenceResponse(response=response_text)

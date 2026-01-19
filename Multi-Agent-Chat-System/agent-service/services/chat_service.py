@@ -27,11 +27,13 @@ from tools.job_search_tool import get_job_search_tool
 from clients.web_search_client import search_web
 from infrastructure.observability.token_tracker import SimpleTokenTracker
 from infrastructure.observability.request_logger import RequestLogger
+from langgraph.checkpoint.memory import MemorySaver
+from workflows import create_supervisor_graph
 
 load_dotenv()
 
 logger = logging.getLogger("HuggBackend")
-
+memory = MemorySaver()
 
 def clean_thinking_tags(text: str) -> str:
     """Remove thinking tags from LLM output"""
@@ -437,3 +439,119 @@ async def _generate_response_original(
             status_code=500,
             detail={"error": "LLM_INFERENCE_FAILED", "message": detail_msg}
         )
+
+async def execute_supervisor_workflow(
+    user_id: str,
+    chat_id: str,
+    prompt: str,
+    request_id: str,
+    correlation_id: str,
+    max_result: Optional[int] = 5,
+    time_window_hours: Optional[int] = 72
+) -> str:
+    """
+    Generate response with workflows
+
+    Args:
+        user_id: User ID
+        chat_id: Chat session ID
+        prompt: User message
+        request_id: Request ID for logging
+        correlation_id: Correlation ID for logging
+
+    Returns:
+        Generated response text
+    """
+
+    log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [UID:{user_id[:8]}] [CHAT:{chat_id[:8]}]"
+
+    is_owner = await run_in_threadpool(
+        MONGO_CHAT_CLIENT.verify_chat_ownership,
+        chat_id,
+        user_id
+    )
+
+    if not is_owner:
+        logger.error(f"{log_prefix} Unauthorized access attempt - user does not own this chat")
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized access to chat session"
+        )
+    
+    # 1. Initialize Graph and Config
+    supervisor_graph = create_supervisor_graph(checkpointer=memory)
+
+    langfuse_handler = CallbackHandler()
+
+    config = {
+        "configurable": {"thread_id": chat_id},
+        "callbacks": [langfuse_handler]
+        }
+
+    try: 
+        # 2. Check if MemorySaver has a snapshot
+        existing_state = await supervisor_graph.aget_state(config)
+
+        if existing_state.values:
+            # Memory is warm! We don't need to load from Mongo.
+            # We just pass the new message.
+            input_data = {
+                "messages": [HumanMessage(content=prompt)],
+                "user_query": prompt
+            }
+        else:
+            # Memory is cold! Rehydrate from MongoDB
+            logger.info(f"Memory cold. Rehydrating chat {chat_id} from MongoDB")
+
+            history_messages, _, _ = await run_in_threadpool(
+                MONGO_CHAT_CLIENT.get_history,
+                chat_id,
+                limit=15,
+                cursor=None
+            )
+
+            langchain_history = _convert_mongo_to_langchain(history_messages)
+            
+            # Seed the state with history AND the current prompt
+            input_data = {
+                "messages": langchain_history + [HumanMessage(content=prompt)],
+                "user_query": prompt,
+                "max_results": max_result,
+                "time_window_hours": time_window_hours,
+                "errors": []
+            }
+
+        # 3. Invoke the supervisor graph
+        result = await supervisor_graph.ainvoke(input_data, config=config)
+
+        logger.info(f"final result: {result}")
+        # 4. Extract final answer (last message in the state)
+        final_answer = result["messages"][-1].content
+
+        # 5. Persist the new exchange back to MongoDB
+        user_message = HistoryMessage(session_id=chat_id, role="user", content=prompt)
+        assistant_message = HistoryMessage(session_id=chat_id, role="assistant", content=final_answer)
+
+        await run_in_threadpool(
+            MONGO_CHAT_CLIENT.save_messages,
+            chat_id,
+            user_id,
+            [user_message, assistant_message]
+        )
+
+        logger.info(f"{log_prefix} Successfully generated and stored response.")
+        return final_answer
+
+    except (ConnectionError, RuntimeError) as e:
+        error_message = HistoryMessage(
+            session_id=chat_id,
+            role="assistant",
+            content="Workflow failed for session"
+        )
+        await run_in_threadpool(
+            MONGO_CHAT_CLIENT.save_messages,
+            chat_id,
+            user_id,
+            [user_message, error_message]
+        )
+        raise HTTPException(status_code=500, detail={"error": "Workflow_INFERENCE_FAILED"})

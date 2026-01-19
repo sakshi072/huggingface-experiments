@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-service"
+version = "2.0.0"
+description = "Multi-Agent Chat System Backend"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "pymongo",
+    "motor",
+    "httpx",
+    "openai",
+    "python-jose[cryptography]",
+    "python-dotenv",
+    "langchain",
+    "langchain-openai",
+    "langchain-community",
+    "langgraph",
+    "langfuse",
+    "sentence-transformers",
+    "huggingface_hub",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]

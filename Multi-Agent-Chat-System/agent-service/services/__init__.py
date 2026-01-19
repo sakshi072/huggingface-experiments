@@ -1,6 +1,6 @@
 """Services package - business logic layer."""
 
-from .chat_service import generate_response
+from .chat_service import generate_response, execute_supervisor_workflow
 from .session_service import (
     create_chat_session,
     get_user_chat_sessions,
@@ -21,4 +21,5 @@ __all__ = [
     "clear_history",
     "generate_smart_title",
     "generate_fallback_title",
+    "execute_supervisor_workflow"
 ]
