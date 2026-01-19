@@ -5,7 +5,7 @@ import httpx
 import logging
 from typing import Optional, List, Dict
 
-from .auth0_token_manager import get_access_token
+from infrastructure.auth.token_manager import get_access_token
 
 logger = logging.getLogger(__name__)
 

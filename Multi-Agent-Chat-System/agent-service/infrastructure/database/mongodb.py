@@ -1,31 +1,17 @@
-import os 
+import os
 import logging
 from typing import Dict, Optional
-from huggingface_hub import InferenceClient
-from .models import HistoryMessage
-from pymongo import MongoClient # New Import
+from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from contextlib import contextmanager
 from dotenv import load_dotenv
-from openai import OpenAI
-
-# --- Logging Setup ---
-# Configure a basic logger for the application
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("HuggBackend")
 
 load_dotenv()
-# --- Configuration ---
-HF_TOKEN = os.getenv("HF_TOKEN", "")
-MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
-# MODEL_ID = "gpt-4o"
-API_BASE_URL = "https://router.huggingface.co/v1/"
-MAX_TOKENS = 1024
-TEMPERATURE = 0.7
+
+logger = logging.getLogger("HuggBackend")
 
 # --- MongoDB Configuration ---
-# NOTE: Replace with your actual connection details
 MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = os.getenv("MONGO_DB_NAME")
 
@@ -61,14 +47,14 @@ MONGO_POOL_CONFIG = {
 class MongoDBManager:
     """
     Singleton MongoDB Manager with Connection Pooling
-    
+
     Why Singleton?
     - Ensures ONE connection pool per application instance
     - Prevents connection pool exhaustion
     - Thread-safe connection sharing
     """
     _instance: Optional['MongoDBManager'] = None
-    _client: Optional[MongoClient] = None 
+    _client: Optional[MongoClient] = None
     _db = None
 
     def __new__(cls):
@@ -81,12 +67,12 @@ class MongoDBManager:
         if self._client is not None:
             logger.warning("MongoDB already initialized")
             return
-        
+
         if not MONGO_URI:
             logger.error("FATAL: MONGO_URI not set")
             raise ValueError("MONGO_URI environment variable required")
-        
-        try: 
+
+        try:
             logger.info("Initializing MongoDB connection pool...")
             logger.info(f"Pool Config: maxPoolSize={MONGO_POOL_CONFIG['maxPoolSize']}, "
                        f"minPoolSize={MONGO_POOL_CONFIG['minPoolSize']}")
@@ -100,16 +86,16 @@ class MongoDBManager:
             # Get database
             self._db = self._client[DB_NAME]
 
-            logger.info(f"✅ MongoDB connected successfully to database: {DB_NAME}")
-            logger.info(f"✅ Connection pool initialized with {MONGO_POOL_CONFIG['maxPoolSize']} max connections")
-        
+            logger.info(f"MongoDB connected successfully to database: {DB_NAME}")
+            logger.info(f"Connection pool initialized with {MONGO_POOL_CONFIG['maxPoolSize']} max connections")
+
         except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-            logger.error(f"❌ FATAL: MongoDB connection failed: {e}")
+            logger.error(f"FATAL: MongoDB connection failed: {e}")
             self._client = None
             self._db = None
             raise
         except Exception as e:
-            logger.error(f"❌ Unexpected error during MongoDB init: {e}")
+            logger.error(f"Unexpected error during MongoDB init: {e}")
             raise
 
     @property
@@ -118,8 +104,8 @@ class MongoDBManager:
         if self._client is None:
             raise RuntimeError("MongoDB not initialized. Call initialize() first.")
         return self._client
-    
-    @property 
+
+    @property
     def db(self):
         """Get database instance"""
         if self._db is None:
@@ -129,10 +115,10 @@ class MongoDBManager:
     def health_check(self) -> bool:
         """
         Check MongoDB connection health
-        
+
         Use Case: Health check endpoint, monitoring
         """
-        try: 
+        try:
             self._client.admin.command('ping')
             return True
         except Exception as e:
@@ -142,7 +128,7 @@ class MongoDBManager:
     def get_connection_stats(self) -> Dict:
         """
         Get connection pool statistics
-        
+
         Use Case: Monitoring, debugging connection issues
         """
         try:
@@ -167,7 +153,7 @@ class MongoDBManager:
             self._client.close()
             self._client = None
             self._db = None
-            logger.info("✅ MongoDB connection closed")
+            logger.info("MongoDB connection closed")
 
 # Initialize singleton instance
 mongo_manager = MongoDBManager()
@@ -182,7 +168,7 @@ def get_db():
 def mongo_session():
     """
     Context manager for MongoDB operations
-    
+
     Use Case: Transactions, cleanup
     """
     try:
@@ -190,33 +176,3 @@ def mongo_session():
     except Exception as e:
         logger.error(f"MongoDB session error: {e}")
         raise
-
-# Define the initial system message using the HistoryMessage model
-SYSTEM_MESSAGE_INFERENCE: Dict[str, str] = {
-    "role": "system",
-    "content": "You are HUGG, a helpful AI assistant. Provide clear, accurate answers. You have access to tools. If the user asks a question about internal documents or knowledge you don't have, you MUST use the search_knowledge_base tool. Do not answer from memory if the tool can help."
-    # "content": "You are HUGG, a helpful AI assistant. Provide clear, accurate answers. You have access to tools. Always use tools before answering ques"
-}
-
-# --- Hugging Face Client Initialization ---
-
-def initialize_hf_client() -> InferenceClient | None:
-    """Initializes and returns the Hugging Face InferenceClient."""
-    if not HF_TOKEN:
-        logger.error("FATAL: HF_TOKEN environment variable not set in backend.")
-        return None
-
-    try:
-        client = InferenceClient(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN
-        )
-        # client = OpenAI()
-        logger.info("Hugging Face InferenceClient initialized.")
-        return client
-    except Exception as e:
-        logger.error(f"Error initializing InferenceClient: {e}", exc_info=True)
-        return None
-
-# Global Client Setup
-HF_CLIENT = initialize_hf_client()

@@ -1,18 +1,21 @@
 from typing import List, Optional, Dict, Any, Tuple
 from pymongo import DESCENDING, ASCENDING
 from pymongo.errors import DuplicateKeyError
-from datetime import datetime 
+from datetime import datetime
 from bson import ObjectId
 import uuid
 import base64
 import json
+import logging
 
-from .config import get_db, logger
-from .models import (
-    HistoryMessage, ChatSessionMetadata, 
-    MessageDocument, ChatMetadataDocument, 
-    CursorInfo 
+from infrastructure.database.mongodb import get_db
+from models import (
+    HistoryMessage, ChatSessionMetadata,
+    MessageDocument, ChatMetadataDocument,
+    CursorInfo
 )
+
+logger = logging.getLogger("HuggBackend")
 
 CHAT_METADATA_COLLECTION = "chat-metadata"
 MESSAGES_COLLECTION = "messages"
