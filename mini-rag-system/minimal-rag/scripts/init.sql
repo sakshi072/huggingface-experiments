@@ -29,7 +29,7 @@ ON CONFLICT (name) DO NOTHING;
 -- Documents table (metadata about uploaded files with domain support)
 CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    domain_id UUID NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+    domain_id UUID NOT NULL REFERENCES domains(id) ON DELETE RESTRICT,
     filename VARCHAR(255) NOT NULL,
     file_type VARCHAR(10) NOT NULL,
     file_size INTEGER NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS document_chunks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    domain_id UUID NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+    domain_id UUID NOT NULL REFERENCES domains(id) ON DELETE RESTRICT,
     chunk_index INTEGER NOT NULL,
     text TEXT NOT NULL,
     embedding vector(384) NOT NULL,

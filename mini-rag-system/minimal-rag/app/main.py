@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.db import startup_database, shutdown_database
-from app.services import KnowledgeBase
+from app.services import KnowledgeBase, storage_service
 from app.schemas import ErrorResponse
 from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
@@ -33,6 +33,10 @@ async def lifespan(app: FastAPI):
     try:
         # Initialize database
         await startup_database()
+
+        # Initialize minIO
+        storage_service._ensure_bucket_exists()
+        logger.info("MinIO Bucket verified on startup.")
 
         # Initialize Vector Storage and Retrieval system
         vector_storage_retrieval = KnowledgeBase()
