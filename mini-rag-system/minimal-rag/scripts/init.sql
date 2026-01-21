@@ -73,14 +73,13 @@ CREATE INDEX IF NOT EXISTS idx_documents_domain ON documents(domain_id);
 CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id) WHERE owner_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(file_hash);
-CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_documents_filename ON documents(filename);
-CREATE INDEX IF NOT EXISTS idx_documents_file_type ON documents(file_type);
 
 CREATE INDEX IF NOT EXISTS idx_chunks_domain ON document_chunks(domain_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);
-CREATE INDEX IF NOT EXISTS idx_chunks_type ON document_chunks(chunk_type);
-CREATE INDEX IF NOT EXISTS idx_chunks_quality ON document_chunks(quality_score) WHERE quality_score IS NOT NULL;
+-- Standard index for the metadata filters
+CREATE INDEX IF NOT EXISTS idx_chunks_metadata_filter 
+ON document_chunks (domain_id, document_id);
 
 -- Vector similarity index (HNSW for fast approximate nearest neighbor search)
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON document_chunks

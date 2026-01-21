@@ -12,13 +12,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.db import startup_database, shutdown_database
-from app.services import KnowledgeBase, storage_service
+from app.services import KnowledgeBase
+from app.utils.document_storage import storage_service
 from app.schemas import ErrorResponse
 from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
 import logging
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 
 # ============================================================================
 # Lifespan Context Manager

@@ -17,11 +17,9 @@ tiktoken = ">=0.8.0"
 
 numpy = "<2.0.0"
 
-# Embeddings & LLM - HuggingFace free API
-sentence-transformers = "^2.3.0"
+# Embeddings 
+sentence-transformers = {extras = ["onnx"], version = "^5.2.0"}
 requests = "^2.31.0"
-
-huggingface-hub = "^0.20.0"
 
 # Utilities
 python-dotenv = "^1.0.0"
@@ -44,6 +42,9 @@ psycopg2-binary = "^2.9.11"
 minio = "^7.2.20"
 greenlet = "^3.3.0"
 python-jose = {version = "^3.5.0", extras = ["cryptography"]}
+gunicorn = "^23.0.0"
+optimum = {extras = ["onnxruntime"], version = "^2.1.0"}
+redis = "^7.1.0"
 
 [build-system]
 requires = ["poetry-core"]

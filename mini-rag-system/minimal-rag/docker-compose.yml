@@ -6,17 +6,17 @@ services:
     image: pgvector/pgvector:pg16
     container_name: rag_postgres
     environment:
-      POSTGRES_DB: rag_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/01-init.sql
-      - ./scripts/create_user.sql:/docker-entrypoint-initdb.d/02-create_user.sql
+      # - ./scripts/create_user.sql:/docker-entrypoint-initdb.d/02-create_user.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d rag_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,8 +28,8 @@ services:
     image: minio/minio:latest
     container_name: rag_minio
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin123
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     ports:
       - "9000:9000"  # API
       - "9001:9001"  # Console
@@ -43,6 +43,41 @@ services:
       retries: 5
     networks:
       - rag_network
+
+  # FastAPI RAG API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_api
+    env_file:
+      - .env
+    environment:
+      # Override host values for Docker networking
+      POSTGRES_HOST: postgres
+      MINIO_ENDPOINT: minio:9000
+      # Auth0 configuration
+      AUTH0_DOMAIN: ${AUTH0_DOMAIN}
+      AUTH0_AUDIENCE: ${AUTH0_AUDIENCE}
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - rag_network
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
 volumes:
   postgres_data:

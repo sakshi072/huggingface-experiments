@@ -79,7 +79,6 @@ async def search_documents(
         sources = [
             SourceReference(
                 text=source["text"],
-                filename=source["filename"],
                 similarity=round(source["similarity"], 3),
                 file_url=source["file_url"]
             )

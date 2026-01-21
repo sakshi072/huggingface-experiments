@@ -50,7 +50,6 @@ class SourceReference(BaseModel):
     """Source chunk reference in query response."""
 
     text: str = Field(..., description="Retrieved text chunk")
-    filename: str = Field(..., description="Source filename")
     similarity: float = Field(..., ge=0.0, le=1.0, description="Similarity score")
     file_url: Optional[str] = Field(None, description="Download link")
 
@@ -58,7 +57,6 @@ class SourceReference(BaseModel):
         json_schema_extra = {
             "example": {
                 "text": "Machine learning is a subset of AI...",
-                "filename": "ml_basics.txt",
                 "similarity": 0.89,
                 "file_url": "http://localhost:9000/documents/2026/01/10/abc_ml_guide.pdf?X-Amz-..."
             }

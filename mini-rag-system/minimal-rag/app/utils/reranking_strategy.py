@@ -9,10 +9,14 @@ Architecture:
 This eliminates duplicate reranking logic across modules.
 """
 
+import os
 from typing import List, Dict, Tuple, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 from enum import Enum
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class RerankStrategy(Enum):
@@ -28,52 +32,70 @@ class RerankStrategy(Enum):
 class RerankCandidate:
     """
     Unified candidate structure from database
-    
+
     This is what comes OUT of the database query
     """
     chunk_id: str
     document_id: str
-    filename: str
     domain: str
     text: str
-    
+
     # Scores
     vector_similarity: float  # From pgvector cosine similarity
     quality_score: Optional[float] = None
-    
+
     # Metadata
     chunk_type: Optional[str] = None
     chunk_index: int = 0
     keywords: Optional[List[str]] = None
     section_title: Optional[str] = None
     page_number: Optional[int] = None
-    
+    filename: Optional[str] = None
+
     # Additional
     file_url: Optional[str] = None
+    metadata: Optional[Dict] = None
     embedding: Optional[np.ndarray] = None  # Only if needed for MMR
 
 
 @dataclass
 class RerankerConfig:
-    """Configuration for reranking"""
-    strategy: RerankStrategy = RerankStrategy.COMBINED
-    
+    """Configuration for reranking - reads defaults from environment variables"""
+    strategy: RerankStrategy = None
+
     # Quality boost params
-    quality_weight: float = 0.2  # Max 20% boost from quality
-    
+    quality_weight: float = None  # Max boost from quality
+
     # Hybrid params
-    alpha: float = 0.7  # Weight for dense (1-alpha for sparse)
-    
+    alpha: float = None  # Weight for dense (1-alpha for sparse)
+
     # MMR params
-    lambda_param: float = 0.5  # Balance relevance vs diversity
-    
+    lambda_param: float = None  # Balance relevance vs diversity
+
     # Type preferences
     type_weights: Dict[str, float] = None
-    
+
     # Diversity
-    max_chunks_per_doc: int = 2  # Promote diversity across documents
-    
+    max_chunks_per_doc: int = None  # Promote diversity across documents
+
     def __post_init__(self):
+        # Load defaults from env if not explicitly set
+        if self.strategy is None:
+            strategy_str = os.getenv("RERANK_STRATEGY", "combined")
+            self.strategy = RerankStrategy(strategy_str)
+
+        if self.quality_weight is None:
+            self.quality_weight = float(os.getenv("RERANK_QUALITY_WEIGHT", "0.2"))
+
+        if self.alpha is None:
+            self.alpha = float(os.getenv("RERANK_ALPHA", "0.7"))
+
+        if self.lambda_param is None:
+            self.lambda_param = float(os.getenv("RERANK_LAMBDA", "0.5"))
+
+        if self.max_chunks_per_doc is None:
+            self.max_chunks_per_doc = int(os.getenv("RERANK_MAX_CHUNKS_PER_DOC", "2"))
+
         if self.type_weights is None:
             self.type_weights = {
                 'paragraph': 1.1,
