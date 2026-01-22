@@ -9,7 +9,7 @@ from sqlalchemy import (
     String, Integer, Float, Boolean, ARRAY, DateTime,
     Text, CheckConstraint, Index, ForeignKey, UniqueConstraint, JSON, func
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
@@ -194,3 +194,27 @@ class DocumentChunk(Base):
 
     def __repr__(self):
         return f"<DocumentChunk(id={self.id}, document_id={self.document_id}, chunk_index={self.chunk_index})>"
+
+class SearchAnalytics(Base):
+    """
+    Search Analytics table 
+    Stores Search history with metadata
+    """
+    __tablename__ = "search_analytics"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    result_chunk_ids: Mapped[list[UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), nullable=True)
+    similarity_scores: Mapped[list[float]] = mapped_column(ARRAY(Float), nullable=True)
+
+    # Performance metrics
+    embedding_time_ms: Mapped[float] = mapped_column(Float, nullable=True)
+    search_time_ms: Mapped[float] = mapped_column(Float, nullable=True)
+    total_processing_time: Mapped[float] = mapped_column(Float, nullable=True)
+
+    # Metadata
+    is_cached: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    def __repr__(self):
+        return f"<SearchAnalytics(id={self.id}>"

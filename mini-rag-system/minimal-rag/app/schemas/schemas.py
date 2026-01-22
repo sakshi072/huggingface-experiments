@@ -68,6 +68,7 @@ class SearchResponse(BaseModel):
 
     sources: List[SourceReference] = Field(..., description="Source chunks used")
     query_time: float = Field(..., description="Query processing time in seconds")
+    search_id: str = Field(..., description="Search UUID")
 
     class Config:
         json_schema_extra = {
@@ -80,11 +81,68 @@ class SearchResponse(BaseModel):
                         "file_url": "http://localhost:9000/documents/2026/01/10/abc_ml_guide.pdf?X-Amz-..."
                     }
                 ],
-                "query_time": 1.23
+                "query_time": 1.23,
+                "seach_id": "123e4567-e89b-12d3-a456-426614174000"
             }
         }
 
 
+class SearchResult(BaseModel):
+    """Every query search result for analysis."""
+
+    search_id: str = Field(..., description="Query search id")
+    query_text: str = Field(..., description="Query searched")
+    chunks: List[Dict] = Field(..., description="List of result chunks with similarity")
+    embedding_time_ms: float = Field(..., description="Embedding time in ms")
+    search_time_ms: float = Field(..., description="DB search time in ms")
+    total_processing_time: float = Field(..., description="Total processing time in ms")
+    created_at: str = Field(..., description="Upload timestamp (ISO 8601)")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "search_id": "123e4567-e89b-12d3-a456-426614174000",
+                "query_text": "What is machine learning",
+                "chunks": [
+                    {
+                        "chunk_text": "Machine learning is a subset of AI...",
+                        "similarity": 0.89
+                    }
+                ],
+                "embedding_time_ms": 1.23,
+                "search_time_ms": 1.24,
+                "total_processing_time": 1.67,
+                "created_at": "2026-01-09T15:30:00"
+            }
+        }
+
+class SearchHistory(BaseModel):
+    """Response schema for Search analytics all query searches."""
+
+    search_history: List[SearchResult] = Field(..., description="list of all the search results")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "search_history" : [
+                    {
+                        "search_id": "123e4567-e89b-12d3-a456-426614174000",
+                        "query_text": "What is machine learning",
+                        "chunks": [
+                            {
+                                "chunk_text": "Machine learning is a subset of AI...",
+                                "similarity": 0.89
+                            }
+                        ],
+                        "embedding_time_ms": 1.23,
+                        "search_time_ms": 1.24,
+                        "total_processing_time": 1.67,
+                        "created_at": "2026-01-09T15:30:00"
+                    }
+                ],
+            }
+        }
+ 
 class IngestResponse(BaseModel):
     """Response schema for document ingestion."""
 

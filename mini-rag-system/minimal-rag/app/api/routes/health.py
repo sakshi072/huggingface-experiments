@@ -20,6 +20,8 @@ async def root():
         "endpoints": {
             "POST /ingest": "Upload document (PDF, DOCX, TXT, MD)",
             "POST /search": "Search top k similar chunks for user query",
+            "GET /search": "Get all the queries searched",
+            "GET /search/{id}": "Get search result details",
             "GET /documents": "List all documents",
             "GET /documents/{id}": "Get document details",
             "DELETE /documents/{id}": "Delete document",

@@ -67,7 +67,6 @@ class KnowledgeBase:
         query_text: str,
         domain_name: Optional[str] = None,
         top_k: int = 5,
-        min_similarity: Optional[float] = None,
         rerank_strategy: RerankStrategy = RerankStrategy.COMBINED,
     ) -> Dict:
         """Search with vector similarity and optional reranking."""
@@ -75,9 +74,16 @@ class KnowledgeBase:
             query_text=query_text,
             domain_name=domain_name,
             top_k=top_k,
-            min_similarity=min_similarity,
             rerank_strategy=rerank_strategy,
         )
+    
+    async def search_history(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+        """List of query search result"""
+        return await self._search.get_search_history(limit, offset)
+    
+    async def get_search_history_by_id(self, search_id:UUID) -> List[Dict]:
+        """Query search result"""
+        return await self._search.get_search_history_by_id(search_id)
 
     # =========================================================================
     # Document CRUD (delegated to ingestion service)

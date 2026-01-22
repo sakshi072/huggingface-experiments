@@ -12,6 +12,8 @@ from app.schemas.schemas import (
     HealthResponse,
     StatResponse,
     ErrorResponse,
+    SearchHistory,
+    SearchResult
 )
 
 __all__ = [
@@ -25,4 +27,6 @@ __all__ = [
     "HealthResponse",
     "StatResponse",
     "ErrorResponse",
+    "SearchResult",
+    "SearchHistory"
 ]

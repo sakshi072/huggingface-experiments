@@ -68,6 +68,20 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     UNIQUE(document_id, chunk_index)
 );
 
+-- Search Results table (For Analytics)
+CREATE TABLE IF NOT EXISTS search_analytics (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    query_text TEXT NOT NULL,
+    result_chunk_ids UUID[],
+    similarity_scores FLOAT[],
+    embedding_time_ms FLOAT, -- query to vector
+    search_time_ms FLOAT, -- Vector - DB
+    total_processing_time FLOAT,
+    is_cached BOOLEAN DEFAULT false,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP 
+);
+
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_documents_domain ON documents(domain_id);
 CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id) WHERE owner_id IS NOT NULL;

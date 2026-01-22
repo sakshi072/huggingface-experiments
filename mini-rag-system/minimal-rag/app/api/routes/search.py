@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from app.api.dependencies import get_vectore_storage_retrieval
 from app.core import require_scope, extract_scopes
-from app.schemas import SearchRequest, SearchResponse, SourceReference
+from app.schemas import SearchRequest, SearchResponse, SourceReference, SearchHistory, SearchResult
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +88,88 @@ async def search_documents(
 
         return SearchResponse(
             sources=sources,
-            query_time=round(query_time, 2)
+            query_time=round(query_time, 2),
+            search_id=str(result["search_id"])
         )
 
     except Exception as e:
-        import traceback
         logger.error(f"Search error: {e}\n{traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Error processing query: {str(e)}"
+        )
+
+@router.get("", response_model=SearchHistory)
+async def search_history(limit:int = 10, offset:int = 0):
+    """
+    List all Query Search Results.
+
+    Parameters:
+    - limit: Max documents to return (default 10)
+    - skip: Number of documents to skip (for pagination)
+
+    Returns Search History with:
+    - Search ID
+    - Query Text
+    - Chunks 
+    - Embedding time
+    - DB search time
+    - Processing time
+    - Created at
+    """
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Vector Storage and Retrieval system not initialized"
+        )
+    
+    try:
+        results = await vector_storage_retrieval.search_history(limit, offset)
+
+        return SearchHistory(
+            search_history=results
+        )
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error listing history: {str(e)}"
+        )
+
+@router.get("/{search_id}", response_model=SearchResult)
+async def search_history_by_search_id(search_id:str):
+    """
+    Query Search Results.
+
+    Parameters:
+    - search_id
+
+    Returns Search History with:
+    - Search ID
+    - Query Text
+    - Chunks 
+    - Embedding time
+    - DB search time
+    - Processing time
+    - Created at
+    """
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Vector Storage and Retrieval system not initialized"
+        )
+    
+    try:
+        result = await vector_storage_retrieval.get_search_history_by_id(search_id)
+
+        return result
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error listing history: {str(e)}"
         )
