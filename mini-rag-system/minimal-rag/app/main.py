@@ -17,6 +17,7 @@ from app.utils.document_storage import storage_service
 from app.schemas import ErrorResponse
 from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,8 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan
 )
+
+security = HTTPBearer()
 
 # Include routers
 app.include_router(health.router)

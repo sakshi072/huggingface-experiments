@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/search", tags=["Query"])
 
-
 @router.post("", response_model=SearchResponse)
 async def search_documents(
     request: SearchRequest,
@@ -100,7 +99,11 @@ async def search_documents(
         )
 
 @router.get("", response_model=SearchHistory)
-async def search_history(limit:int = 10, offset:int = 0):
+async def search_history(
+    limit:int = 10, 
+    offset:int = 0,
+    token: dict = Depends(require_scope("search:knowledge")
+    )):
     """
     List all Query Search Results.
 
@@ -125,6 +128,13 @@ async def search_history(limit:int = 10, offset:int = 0):
         )
     
     try:
+        client_id = token.get("sub", "unknown")
+        scopes = extract_scopes(token)
+
+        logger.info(
+            f"Search request from client: {client_id}, scopes: {scopes}"
+        )
+
         results = await vector_storage_retrieval.search_history(limit, offset)
 
         return SearchHistory(
@@ -139,7 +149,10 @@ async def search_history(limit:int = 10, offset:int = 0):
         )
 
 @router.get("/{search_id}", response_model=SearchResult)
-async def search_history_by_search_id(search_id:str):
+async def search_history_by_search_id(
+    search_id:str,
+    token: dict = Depends(require_scope("search:knowledge"))
+    ):
     """
     Query Search Results.
 
@@ -163,6 +176,12 @@ async def search_history_by_search_id(search_id:str):
         )
     
     try:
+        client_id = token.get("sub", "unknown")
+        scopes = extract_scopes(token)
+
+        logger.info(
+            f"Search request from client: {client_id}, scopes: {scopes}"
+        )
         result = await vector_storage_retrieval.get_search_history_by_id(search_id)
 
         return result
