@@ -7,13 +7,11 @@ Handles:
 """
 
 import logging
-import os
 import time
 from typing import Dict, List, Optional
 from uuid import UUID
 
 import numpy as np
-from dotenv import load_dotenv
 from sqlalchemy import select, func
 
 from app.core.feature_flags import feature_flags
@@ -28,8 +26,8 @@ from app.utils.reranking_strategy import (
 from app.utils.timer import SearchTimer
 from app.utils.redis_cache_helper import SearchCache
 from app.schemas import SearchResult
+from app.core.settings import settings
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -41,9 +39,7 @@ class SearchService:
         logger.info("Initializing SearchService...")
 
         # Load config
-        self.embedding_model = os.getenv(
-            "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-        )
+        self.embedding_model = settings.embedding.model
 
         # Load embedder (shared with ingestion service)
         logger.info(f"  Embedding model: {self.embedding_model}")

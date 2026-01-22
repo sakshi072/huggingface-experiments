@@ -1,4 +1,4 @@
-import hashlib
+
 import json
 import redis.asyncio as redis
 import logging

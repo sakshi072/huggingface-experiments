@@ -3,7 +3,6 @@ Auth0 JWT Token Validator
 
 Validates JWT tokens from Auth0 for Client Credentials flow.
 """
-import os
 import logging
 from typing import Optional, List
 from functools import lru_cache
@@ -13,47 +12,15 @@ from jose import jwt, JWTError
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError
 from fastapi import HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
 
-
 # ============================================================================
-# Configuration
+# Configuration managed in settings with pydantic-settings
 # ============================================================================
-
-class Auth0Config:
-    """Auth0 configuration for JWT validation"""
-
-    def __init__(self):
-        self.domain = os.getenv("AUTH0_DOMAIN", "")
-        self.audience = os.getenv("AUTH0_AUDIENCE", "")
-        self.issuer = f"https://{self.domain}/" if self.domain else ""
-        self.algorithms = ["RS256"]
-
-        if not self.domain or not self.audience:
-            raise ValueError(
-                "AUTH0_DOMAIN and AUTH0_AUDIENCE must be set for JWT validation"
-            )
-
-    @property
-    def jwks_url(self) -> str:
-        """Get JWKS (JSON Web Key Set) URL"""
-        return f"https://{self.domain}/.well-known/jwks.json"
-
-
-# Global Config
-_config: Optional[Auth0Config] = None
-
-
-def get_auth0_config() -> Auth0Config:
-    """Get Auth0 configuration (singleton)"""
-    global _config
-    if _config is None:
-        _config = Auth0Config()
-    return _config
-
 
 # ============================================================================
 # JWKS Fetcher (with caching)
@@ -70,10 +37,9 @@ def get_jwks() -> dict:
     Returns:
         JWKS dictionary
     """
-    config = get_auth0_config()
 
     try:
-        response = httpx.get(config.jwks_url, timeout=10.0)
+        response = httpx.get(settings.auth0.jwks_url, timeout=10.0)
         response.raise_for_status()
         jwks = response.json()
         logger.debug(f"Fetched JWKS with {len(jwks.get('keys', []))} keys")
@@ -148,8 +114,6 @@ def validate_jwt_token(token: str) -> dict:
         ValueError: If token is invalid
     """
 
-    config = get_auth0_config()
-
     try:
         # Get signing key
         signing_key = get_signing_key(token)
@@ -158,9 +122,9 @@ def validate_jwt_token(token: str) -> dict:
         payload = jwt.decode(
             token,
             signing_key,
-            algorithms=config.algorithms,
-            audience=config.audience,
-            issuer=config.issuer
+            algorithms=["RS256"],
+            audience=settings.auth0.audience,
+            issuer=settings.auth0.issuer
         )
 
         logger.debug(f"Token validated for subject: {payload.get('sub')}")

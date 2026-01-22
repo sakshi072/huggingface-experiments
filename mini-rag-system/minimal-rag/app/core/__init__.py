@@ -6,11 +6,10 @@ from app.core.security import (
     require_scope,
     extract_scopes,
     has_scope,
-    validate_jwt_token,
-    Auth0Config,
-    get_auth0_config,
+    validate_jwt_token
 )
 from app.core.feature_flags import feature_flags, FeatureFlags
+from app.core.settings import settings
 
 __all__ = [
     "verify_jwt",
@@ -18,8 +17,7 @@ __all__ = [
     "extract_scopes",
     "has_scope",
     "validate_jwt_token",
-    "Auth0Config",
-    "get_auth0_config",
     "feature_flags",
     "FeatureFlags",
+    "settings"
 ]

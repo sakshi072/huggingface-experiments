@@ -9,22 +9,20 @@ Handles:
 
 import hashlib
 import logging
-import os
 from typing import Dict, List, Optional
 from uuid import UUID
 
 import numpy as np
-from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import and_, func, select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import Document, DocumentChunk, Domain, db_manager
 from app.utils.document_parser import DocumentParser
 from app.utils.document_storage import storage_service
 from app.utils.embeddings import get_shared_embedder, embed_chunks
 from app.utils.semantic_chunker import HybridChunker, SemanticChunker
+from app.core.settings import settings
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -36,13 +34,10 @@ class IngestionService:
         logger.info("Initializing IngestionService...")
 
         # Load config from env
-        self.embedding_model = os.getenv(
-            "EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-        )
-        self.chunk_size = int(os.getenv("CHUNK_SIZE", "512"))
-        self.chunk_overlap = int(os.getenv("CHUNK_OVERLAP", "50"))
-        self.chunking_strategy = os.getenv("CHUNKING_STRATEGY", "recursive_split")
-
+        self.embedding_model = settings.embedding.model
+        self.chunk_size = settings.embedding.chunk_size
+        self.chunk_overlap = settings.embedding.chunk_overlap
+        self.chunking_strategy = settings.embedding.chunking_strategy
         # Load embedder
         logger.info(f"  Embedding model: {self.embedding_model}")
         self.embedder = get_shared_embedder(self.embedding_model)
@@ -74,21 +69,21 @@ class IngestionService:
     # Domain Management
     # =========================================================================
 
-    async def ensure_domain(self, domain_name: str) -> UUID:
+    async def ensure_domain(self, session:AsyncSession, domain_name: str) -> UUID:
         """Ensure domain exists, create if not."""
-        async with db_manager.session() as session:
-            result = await session.execute(
-                select(Domain).where(Domain.name == domain_name)
-            )
-            domain = result.scalar_one_or_none()
+        
+        result = await session.execute(
+            select(Domain).where(Domain.name == domain_name)
+        )
+        domain = result.scalar_one_or_none()
 
-            if not domain:
-                logger.info(f"Creating new domain: {domain_name}")
-                domain = Domain(name=domain_name, min_similarity_threshold=0.5)
-                session.add(domain)
-                await session.flush()
+        if not domain:
+            logger.info(f"Creating new domain: {domain_name}")
+            domain = Domain(name=domain_name, min_similarity_threshold=0.5)
+            session.add(domain)
+            await session.flush()
 
-            return domain.id
+        return domain.id
 
     # =========================================================================
     # Document Ingestion
@@ -126,7 +121,7 @@ class IngestionService:
         logger.info(f"Ingesting: {filename} -> {domain_name}")
 
         async with db_manager.session() as session:
-            domain_id = await self.ensure_domain(domain_name)
+            domain_id = await self.ensure_domain(session, domain_name)
             file_hash = self._calculate_file_hash(file_data)
 
             # Check for duplicates
@@ -246,9 +241,7 @@ class IngestionService:
                 chunk_texts,
                 self.embedding_model
             )
-            # embeddings = self.embedder.encode(
-            #     chunk_texts, show_progress_bar=False, convert_to_numpy=True
-            # )
+            
             logger.info(f"      Generated {len(embeddings)} embeddings")
 
             # 6. Store chunks

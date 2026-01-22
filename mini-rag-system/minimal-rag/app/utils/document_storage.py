@@ -1,18 +1,17 @@
 """
 MinIO storage service for document file operations
 """
-import os
+
 import io
 from datetime import datetime, timedelta
 from typing import Optional
 from uuid import uuid4
 
-from dotenv import load_dotenv
 from minio import Minio
 from minio.error import S3Error
 import logging
+from app.core.settings import settings
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 class StorageService:
@@ -20,11 +19,11 @@ class StorageService:
 
     def __init__(self):
         """Initialize MinIO client"""
-        self.endpoint = os.getenv("MINIO_ENDPOINT", "localhost:9000")
-        self.access_key = os.getenv("MINIO_ROOT_USER", "minioadmin")
-        self.secret_key = os.getenv("MINIO_ROOT_PASSWORD", "minioadmin123")
-        self.bucket_name = os.getenv("MINIO_BUCKET", "documents")
-        self.secure = os.getenv("MINIO_SECURE", "false").lower() == "true"
+        self.endpoint = settings.minio.endpoint
+        self.access_key = settings.minio.root_user
+        self.secret_key = settings.minio.root_password
+        self.bucket_name = settings.minio.bucket
+        self.secure = settings.minio.secure
 
         # Initialize MinIO client
         self.client = Minio(

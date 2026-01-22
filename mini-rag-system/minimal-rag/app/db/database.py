@@ -2,11 +2,9 @@
 Database connection and session management for PostgreSQL with pgvector
 """
 
-import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -15,20 +13,9 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import DeclarativeBase
 import logging
+from app.core.settings import settings
 
-load_dotenv()
 logger = logging.getLogger(__name__)
-
-# Database Configuration
-DATABASE_URL = (
-    f"postgresql+asyncpg://"
-    f"{os.getenv('POSTGRES_USER')}:"
-    f"{os.getenv('POSTGRES_PASSWORD')}@"
-    f"{os.getenv('POSTGRES_HOST')}:"
-    f"{os.getenv('POSTGRES_PORT')}/"
-    f"{os.getenv('POSTGRES_DB')}"
-)
-
 
 class Base(DeclarativeBase):
     """Modern Base class for SQLAlchemy 2.0 models"""
@@ -38,14 +25,14 @@ class Base(DeclarativeBase):
 class DatabaseManager:
     """Manages database connections and sessions"""
 
-    def __init__(self, url: str = DATABASE_URL):
+    def __init__(self):
         """
         Initialize database manager
 
         Args:
             url: Database connection URL
         """
-        self.url = url
+        self.url = settings.database.url
         self.engine: AsyncEngine = None
         self.session_factory: async_sessionmaker = None
 

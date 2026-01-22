@@ -25,6 +25,7 @@ requests = "^2.31.0"
 python-dotenv = "^1.0.0"
 openai = "^2.14.0"
 aiohttp = "^3.9.0"
+pydantic-settings = "^2.0.0"
 
 # FastAPI 
 fastapi = "^0.109.0"

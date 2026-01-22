@@ -9,15 +9,11 @@ Architecture:
 This eliminates duplicate reranking logic across modules.
 """
 
-import os
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass, field
 import numpy as np
 from enum import Enum
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from app.core.settings import settings
 
 class RerankStrategy(Enum):
     """Available reranking strategies"""
@@ -81,20 +77,20 @@ class RerankerConfig:
     def __post_init__(self):
         # Load defaults from env if not explicitly set
         if self.strategy is None:
-            strategy_str = os.getenv("RERANK_STRATEGY", "combined")
+            strategy_str = settings.rerank.strategy
             self.strategy = RerankStrategy(strategy_str)
 
         if self.quality_weight is None:
-            self.quality_weight = float(os.getenv("RERANK_QUALITY_WEIGHT", "0.2"))
+            self.quality_weight = settings.rerank.quality_weight
 
         if self.alpha is None:
-            self.alpha = float(os.getenv("RERANK_ALPHA", "0.7"))
+            self.alpha = settings.rerank.alpha
 
         if self.lambda_param is None:
-            self.lambda_param = float(os.getenv("RERANK_LAMBDA", "0.5"))
+            self.lambda_param = settings.rerank.lambda_param
 
         if self.max_chunks_per_doc is None:
-            self.max_chunks_per_doc = int(os.getenv("RERANK_MAX_CHUNKS_PER_DOC", "2"))
+            self.max_chunks_per_doc = settings.rerank.max_chunks_per_doc
 
         if self.type_weights is None:
             self.type_weights = {
