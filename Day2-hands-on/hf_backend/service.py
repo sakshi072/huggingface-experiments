@@ -11,6 +11,7 @@ from .rag_client import get_rag_client, get_rag_tool_definition, format_tool_res
 import json
 import re
 from langchain_openai import ChatOpenAI
+from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
@@ -176,11 +177,17 @@ async def _generate_response_with_langchain(
     langchain_history = _convert_mongo_to_langchain(mongo_history)
 
     # 2. Initialize LangChain components
-    llm = ChatOpenAI(
-        model="gpt-4o-mini",
+    # llm = ChatOpenAI(
+    #     model="gpt-4o-mini",
+    #     temperature=TEMPERATURE,
+    #     max_tokens=MAX_TOKENS,
+    #     openai_api_key=os.getenv("OPENAI_API_KEY"),
+    #     callbacks=[token_tracker, RequestLogger()]
+    # )
+    llm = ChatOllama(
+        model="llama3.1:8b", # Ensure you have run 'ollama pull llama3.1'
         temperature=TEMPERATURE,
-        max_tokens=MAX_TOKENS,
-        openai_api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         callbacks=[token_tracker, RequestLogger()]
     )
 
@@ -213,7 +220,7 @@ async def _generate_response_with_langchain(
         agent=agent,
         tools=tools,
         verbose=True,
-        max_iterations=2,
+        max_iterations=3,
         early_stopping_method="force",
         return_intermediate_steps=True,
         callbacks=[token_tracker]

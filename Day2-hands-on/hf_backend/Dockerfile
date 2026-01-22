@@ -27,7 +27,9 @@ RUN pip install --no-cache-dir \
     langchain-community \
     langchain-core \
     langchain-text-splitters \
-    langchain-classic
+    langchain-classic \
+    langfuse \
+    langchain-ollama
 
 # Verify critical packages are installed
 RUN python -c "import fastapi; import uvicorn; import pymongo; import openai; print('✅ All packages installed')"
