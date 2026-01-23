@@ -11,7 +11,8 @@ import hashlib
 import logging
 from typing import Dict, List, Optional
 from uuid import UUID
-
+import time
+import asyncio
 import numpy as np
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import and_, func, select
@@ -22,6 +23,8 @@ from app.utils.document_storage import storage_service
 from app.utils.embeddings import get_shared_embedder, embed_chunks
 from app.utils.semantic_chunker import HybridChunker, SemanticChunker
 from app.core.settings import settings
+from fastapi import UploadFile, HTTPException
+from app.schemas import FileUploadResult, UploadStatus
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +51,139 @@ class IngestionService:
 
         logger.info("IngestionService ready")
 
+    async def process_single_file(
+        self,
+        file: UploadFile,
+        domain:str,
+        file_number: int = 1,
+        total_files: int = 1
+    ) -> FileUploadResult:
+        """
+        Process a single file in the batch or direct upload
+        
+        This is called concurrently for each file in the batch.
+        Each file gets independent error handling.
+        """
+        file_start_time = time.time()
+        filename = file.filename
+
+        logger.info(f"[{file_number}/{total_files}] Processing: {filename}")
+
+        # Validate file type
+        allowed_extensions = {".txt", ".md", ".pdf", ".docx"}
+        file_ext = file.filename.split('.')[-1].lower()
+
+        if f".{file_ext}" not in allowed_extensions:
+            logger.warning(f"[{file_number}/{total_files}] Skipped (unsupported): {filename}")
+            if total_files == 1:
+                raise FileUploadResult(
+                    status_code=400,
+                    detail=f"Unsupported file type: {file_ext}. Allowed: {allowed_extensions}"
+                )
+            return FileUploadResult(
+                filename=filename,
+                status=UploadStatus.FAILED,
+                error_message=f"Unsupported file type: {file_ext}. Allowed: {', '.join(allowed_extensions)}",
+                processing_time=round(time.time() - file_start_time, 2)
+            )
+
+        try:
+            # Read file data
+            file_data = await file.read()
+
+            # Validate file isn't empty
+            if len(file_data) == 0:
+                return FileUploadResult(
+                    filename=filename,
+                    status=UploadStatus.FAILED,
+                    error_message="File is empty",
+                    processing_time=round(time.time() - file_start_time, 2)
+                )
+
+            # Ingest document
+            document_id, is_duplicate = await self.ingest_file(
+                file_data=file_data,
+                filename=file.filename,
+                file_type=file_ext,
+                domain_name=domain,
+                metadata=None
+            )
+
+            processing_time = time.time() - file_start_time
+
+            # Get document details
+            doc = await self.get_document(document_id)
+
+            doc_metadata = doc.get("metadata")
+            if doc_metadata is not None and not isinstance(doc_metadata, dict):
+                doc_metadata = {}
+
+            if is_duplicate:
+                status = UploadStatus.DUPLICATE
+                message = "Duplicate file detected! Using existing document."
+                logger.info(f"[{file_number}/{total_files}] Duplicate: {filename}")
+            else:
+                status = UploadStatus.SUCCESS
+                message = "Document ingested successfully"
+                logger.info(
+                    f"[{file_number}/{total_files}] Success: {filename} "
+                    f"({doc['chunk_count']} chunks in {processing_time:.2f}s)"
+                )
+
+            return FileUploadResult(
+                message=message,
+                filename=filename,
+                status=status,
+                document_id=str(document_id),
+                chunks_created=doc["chunk_count"],
+                processing_time=round(processing_time, 2),
+                metadata=doc_metadata,
+                error_message=None
+            )
+        except Exception as e:
+            processing_time = time.time() - file_start_time
+            error_msg = str(e)
+
+            logger.error(
+                f"[{file_number}/{total_files}] Failed: {filename} - {error_msg}"
+            )
+            if total_files == 1:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error processing document: {str(e)}"
+                )
+        
+    async def process_files_concurrently(
+        self,
+        files: List[UploadFile],
+        domain:str
+    ) -> List[FileUploadResult]:
+        """
+        Process multiple files concurrently using asyncio.gather
+        """
+        tasks = [
+            self.process_single_file(file, domain, idx+1, len(files))
+            for idx, file in enumerate(files)
+        ]
+
+        # Run all tasks concurrently
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Convert exceptions to failed results
+        final_results = []
+        for idx, result in enumerate(results):
+            if isinstance(result, Exception):
+                final_results.append(FileUploadResult(
+                    filename=files[idx].filename,
+                    status=UploadStatus.FAILED,
+                    error_message=f"Unexpected error: {str(result)}",
+                    processing_time=0.0
+                ))
+            else:
+                final_results.append(result)
+        
+        return final_results
+    
     def _create_chunker(self):
         """Create chunker based on configured strategy."""
         if self.chunking_strategy == "semantic_chunking":

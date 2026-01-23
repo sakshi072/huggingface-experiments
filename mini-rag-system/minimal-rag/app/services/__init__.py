@@ -10,7 +10,8 @@ from app.db import db_manager
 from app.services.ingestion_service import IngestionService
 from app.services.search_service import SearchService
 from app.utils.reranking_strategy import RerankerConfig, RerankStrategy
-
+from app.schemas import FileUploadResult, UploadStatus
+from fastapi import UploadFile
 logger = logging.getLogger(__name__)
 
 
@@ -37,6 +38,32 @@ class KnowledgeBase:
     # Ingestion (delegated)
     # =========================================================================
 
+    async def process_single_file(
+            self,
+            file:UploadFile,
+            domain_name:str,
+            file_number:int,
+            total_files:int
+    ) -> FileUploadResult:
+        """Process single file"""
+        return await self._ingestion.process_single_file(
+            file=file,
+            domain=domain_name,
+            file_number=file_number,
+            total_files=total_files,
+        )
+    
+    async def process_files_concurrently(
+        self,
+        files: List[UploadFile],
+        domain:str
+    ) -> List[FileUploadResult]:
+        """Process batch upload"""
+        return await self._ingestion.process_files_concurrently(
+            files,
+            domain
+        )
+    
     async def ingest_file(
         self,
         file_data: bytes,

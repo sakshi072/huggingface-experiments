@@ -1,19 +1,19 @@
 """
 Document management endpoints
 """
-import time
 from uuid import UUID
-
+import time
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from app.core import require_scope, extract_scopes
 from app.api.dependencies import get_vectore_storage_retrieval
-from app.schemas import IngestResponse, DocumentMetadata, DocumentListResponse
+from app.schemas import FileUploadResult, DocumentMetadata, DocumentListResponse, BatchUploadResponse, UploadStatus
 import logging 
+from typing import List
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 logger = logging.getLogger(__name__)
 
-@router.post("", response_model=IngestResponse)
+@router.post("", response_model=FileUploadResult)
 async def ingest_document(
     file: UploadFile = File(...),
     token: dict = Depends(require_scope("search:knowledge"))
@@ -41,65 +41,113 @@ async def ingest_document(
             status_code=503,
             detail="Vector Storage and Retrieval system not initialized"
         )
+    
+    client_id = token.get("sub", "unknown")
+    scopes = extract_scopes(token)
 
-    # Validate file type
-    allowed_extensions = {".txt", ".md", ".pdf", ".docx"}
-    file_ext = file.filename.split('.')[-1].lower()
+    logger.info(
+        f"Search request from client: {client_id}, scopes: {scopes}"
+        )
+    return await vector_storage_retrieval.process_single_file(
+        file=file,
+        domain_name="",
+        file_number=1,
+        total_files=1
+    )
 
-    if f".{file_ext}" not in allowed_extensions:
+@router.post("/batch", response_model=BatchUploadResponse)
+async def batch_ingest_document(
+    files: List[UploadFile] = File(..., description="Multiple files to upload (max 20)"),
+    domain: str = "general",
+    token: dict = Depends(require_scope("search:knowledge"))
+):
+    """
+    Upload and ingest MULTIPLE documents in one request.
+
+    Features:
+    - Upload up to 20 files simultaneously
+    - Parallel processing (faster than sequential uploads)
+    - Individual error handling (one failure doesn't stop others)
+    - Duplicate detection per file
+    - Detailed results for each file
+
+    Supported formats: .txt, .md, .pdf, .docx
+
+    Returns:
+    - Summary statistics (total, successful, failed, duplicates)
+    - Individual results for each file with document IDs
+    - Total processing time
+    """
+    vector_storage_retrieval = get_vectore_storage_retrieval()
+    if vector_storage_retrieval is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Vector Storage and Retrieval system not initialized"
+        )
+    
+    # Validate inputs
+    MAX_FILES = 20
+    if len(files) > MAX_FILES:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported file type: {file_ext}. Allowed: {allowed_extensions}"
+            detail=f"Maximum {MAX_FILES} files allowed per batch, Received {len(files)}"
         )
-
-    try:
-        client_id = token.get("sub", "unknown")
-        scopes = extract_scopes(token)
-
-        logger.info(
-            f"Search request from client: {client_id}, scopes: {scopes}"
-        )
-        start_time = time.time()
-
-        file_data = await file.read()
-
-        # Ingest document
-        document_id, is_duplicate = await vector_storage_retrieval.ingest_file(
-            file_data=file_data,
-            filename=file.filename,
-            file_type=file_ext,
-            metadata=None
-        )
-
-        processing_time = time.time() - start_time
-
-        # Get document details
-        doc = await vector_storage_retrieval.get_document(document_id)
-
-        doc_metadata = doc.get("metadata")
-        if doc_metadata is not None and not isinstance(doc_metadata, dict):
-            doc_metadata = {}
-
-        if is_duplicate:
-            message = "Duplicate file detected! Using existing document."
-        else:
-            message = "Document ingested successfully"
-
-        return IngestResponse(
-            message=message,
-            document_id=str(document_id),
-            filename=file.filename,
-            chunks_created=doc["chunk_count"],
-            processing_time=round(processing_time, 2),
-            metadata=doc_metadata,
-            status=doc["status"]
-        )
-    except Exception as e:
+    
+    if len(files) == 0:
         raise HTTPException(
-            status_code=500,
-            detail=f"Error processing document: {str(e)}"
+            status_code=400,
+            detail="No files provided. Please upload at least one file."
         )
+    
+    client_id = token.get("sub", "unknown")
+    scopes = extract_scopes(token)
+    logger.info(
+        f"Search request from client: {client_id}, scopes: {scopes}"
+        )
+    
+    # Start timing
+    batch_start_time = time.time()
 
+    # Process files concurrently
+    results = await vector_storage_retrieval.process_files_concurrently(
+        files=files,
+        domain=domain
+    )
+
+    # Calculate statistics
+    total_processing_time = time.time() - batch_start_time
+
+    stats = {
+        "successful": sum(1 for r in results if r.status == UploadStatus.SUCCESS),
+        "failed": sum(1 for r in results if r.status == UploadStatus.FAILED),
+        "duplicates": sum(1 for r in results if r.status == UploadStatus.DUPLICATE)
+    }
+
+    # Generate summary message
+    if stats["successful"] == len(files):
+        message = f"All {len(files)} files uploaded successfully"
+    elif stats["failed"] == len(files):
+        message = f"All {len(files)} files failed to upload"
+    else:
+        message = (
+            f"Batch upload completed: {stats['successful']} successful, "
+            f"{stats['failed']} failed, {stats['duplicates']} duplicates"
+        )
+    
+    logger.info(
+        f"Batch upload complete: {stats['successful']}/{len(files)} successful "
+        f"in {total_processing_time:.2f}s"
+    )
+
+    return BatchUploadResponse(
+        message=message,
+        total_files=len(files),
+        successful=stats["successful"],
+        failed=stats["failed"],
+        duplicates=stats["duplicates"],
+        total_processing_time=total_processing_time,
+        results=results
+    )
 
 @router.get("", response_model=DocumentListResponse)
 async def list_documents(
