@@ -7,17 +7,15 @@ Access: http://localhost:8001/docs
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-
+from fastapi import FastAPI, HTTPException
 from app.db import startup_database, shutdown_database
 from app.services import KnowledgeBase
 from app.utils.document_storage import storage_service
-from app.schemas import ErrorResponse
 from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
+from app.core.exception_handler import general_exception_handler, http_exception_handler
+from app.core.middleware import TracingMiddleware
 import logging
 
 logger = logging.getLogger(__name__)
@@ -77,23 +75,11 @@ app = FastAPI(
 
 security = HTTPBearer()
 
+app.add_exception_handler(Exception, general_exception_handler)
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_middleware(TracingMiddleware)
+
 # Include routers
 app.include_router(health.router)
 app.include_router(documents.router)
 app.include_router(search.router)
-
-
-# ============================================================================
-# Error Handlers
-# ============================================================================
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Handle unexpected exceptions."""
-    return JSONResponse(
-        status_code=500,
-        content=ErrorResponse(
-            error="Internal server error",
-            detail=str(exc)
-        ).model_dump()
-    )

@@ -77,23 +77,17 @@ async def get_stats():
     - Total chunks
     - Documents by status (processing, completed, failed)
     """
-    vector_storage_retrieval = vector_storage_retrieval()
+    vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
             detail="Vector Storage and Retrieval system system not initialized"
         )
 
-    try:
-        stats = await vector_storage_retrieval.get_stats()
+    stats = await vector_storage_retrieval.get_stats()
 
-        return StatResponse(
-            total_documents=stats["total_documents"],
-            total_chunks=stats["total_chunks"],
-            status_breakdown=stats["status_breakdown"]
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting stats: {str(e)}"
-        )
+    return StatResponse(
+        total_documents=stats["total_documents"],
+        total_chunks=stats["total_chunks"],
+        status_breakdown=stats["status_breakdown"]
+    )

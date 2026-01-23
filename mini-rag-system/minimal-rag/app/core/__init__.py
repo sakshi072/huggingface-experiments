@@ -10,6 +10,8 @@ from app.core.security import (
 )
 from app.core.feature_flags import feature_flags, FeatureFlags
 from app.core.settings import settings
+from app.core.exception_handler import general_exception_handler, http_exception_handler
+from app.core.middleware import TracingMiddleware
 
 __all__ = [
     "verify_jwt",
@@ -19,5 +21,8 @@ __all__ = [
     "validate_jwt_token",
     "feature_flags",
     "FeatureFlags",
-    "settings"
+    "settings",
+    "general_exception_handler",
+    "http_exception_handler",
+    "TracingMiddleware"
 ]

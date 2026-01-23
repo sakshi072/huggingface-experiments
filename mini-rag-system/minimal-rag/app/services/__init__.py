@@ -10,7 +10,7 @@ from app.db import db_manager
 from app.services.ingestion_service import IngestionService
 from app.services.search_service import SearchService
 from app.utils.reranking_strategy import RerankerConfig, RerankStrategy
-from app.schemas import FileUploadResult, UploadStatus
+from app.schemas import FileUploadResult
 from fastapi import UploadFile
 logger = logging.getLogger(__name__)
 

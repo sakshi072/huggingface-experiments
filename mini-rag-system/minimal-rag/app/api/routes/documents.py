@@ -170,43 +170,37 @@ async def list_documents(
     - Upload timestamp
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
+
     if vector_storage_retrieval is None:
         raise HTTPException(
             status_code=503,
             detail="Vector Storage and Retrieval system not initialized"
         )
 
-    try:
-        client_id = token.get("sub", "unknown")
-        scopes = extract_scopes(token)
+    client_id = token.get("sub", "unknown")
+    scopes = extract_scopes(token)
 
-        logger.info(
-            f"Search request from client: {client_id}, scopes: {scopes}"
-        )
+    logger.info(
+        f"Search request from client: {client_id}, scopes: {scopes}"
+    )
 
-        docs = await vector_storage_retrieval.list_documents(limit=limit + skip)
+    docs = await vector_storage_retrieval.list_documents(limit=limit + skip)
 
-        docs = docs[skip:skip + limit]
+    docs = docs[skip:skip + limit]
 
-        return DocumentListResponse(
-            documents=[
-                DocumentMetadata(
-                    id=doc["id"],
-                    filename=doc["filename"],
-                    status=doc["status"],
-                    chunk_count=doc["chunk_count"],
-                    created_at=doc["created_at"]
-                )
-                for doc in docs
-            ],
-            total=len(docs)
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error listing documents: {str(e)}"
-        )
+    return DocumentListResponse(
+        documents=[
+            DocumentMetadata(
+                id=doc["id"],
+                filename=doc["filename"],
+                status=doc["status"],
+                chunk_count=doc["chunk_count"],
+                created_at=doc["created_at"]
+            )
+            for doc in docs
+        ],
+        total=len(docs)
+    )
 
 
 @router.get("/{document_id}")
@@ -231,37 +225,27 @@ async def get_document(
             detail="Vector Storage and Retrieval system not initialized"
         )
 
+    client_id = token.get("sub", "unknown")
+    scopes = extract_scopes(token)
+
+    logger.info(
+        f"Search request from client: {client_id}, scopes: {scopes}"
+        )
+
     try:
-        client_id = token.get("sub", "unknown")
-        scopes = extract_scopes(token)
-
-        logger.info(
-            f"Search request from client: {client_id}, scopes: {scopes}"
-        )
-
         doc_uuid = UUID(document_id)
-
-        doc = await vector_storage_retrieval.get_document(doc_uuid)
-
-        if doc is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Document not found: {document_id}"
-            )
-
-        return doc
-
     except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+
+    doc = await vector_storage_retrieval.get_document(doc_uuid)
+
+    if doc is None:
         raise HTTPException(
-            status_code=400,
-            detail="Invalid document ID format"
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error getting document: {str(e)}"
+            status_code=404,
+            detail=f"Document not found: {document_id}"
         )
 
+    return doc
 
 @router.delete("/{document_id}")
 async def delete_document(
@@ -285,35 +269,27 @@ async def delete_document(
             detail="Vector Storage and Retrieval system not initialized"
         )
 
+    client_id = token.get("sub", "unknown")
+    scopes = extract_scopes(token)
+
+    logger.info(
+        f"Search request from client: {client_id}, scopes: {scopes}"
+    )
+
     try:
-        client_id = token.get("sub", "unknown")
-        scopes = extract_scopes(token)
-
-        logger.info(
-            f"Search request from client: {client_id}, scopes: {scopes}"
-        )
-
         doc_uuid = UUID(document_id)
-
-        deleted = await vector_storage_retrieval.delete_document(doc_uuid)
-
-        if not deleted:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Document not found: {document_id}"
-            )
-
-        return {
-            "message": "Document deleted successfully",
-            "document_id": document_id
-        }
     except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid document ID format")
+
+    deleted = await vector_storage_retrieval.delete_document(doc_uuid)
+
+    if not deleted:
         raise HTTPException(
-            status_code=400,
-            detail="Invalid document ID format"
+            status_code=404,
+            detail=f"Document not found: {document_id}"
         )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error deleting document: {str(e)}"
-        )
+
+    return {
+        "message": "Document deleted successfully",
+        "document_id": document_id
+    }
