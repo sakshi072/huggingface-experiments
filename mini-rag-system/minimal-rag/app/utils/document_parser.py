@@ -15,6 +15,11 @@ import pypdf
 import pdfplumber
 from docx import Document
 import logging
+from app.core.exceptions import (
+    UnsupportedFileTypeException,
+    DocumentParsingException,
+    InsufficientContentException
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +90,7 @@ class DocumentParser:
                 "metadata": metadata
             }
         except Exception as e:
-            raise ValueError(f"Failed to parse PDF: {str(e)}")
+            raise DocumentParsingException("unknown", "pdf", str(e))
 
     @staticmethod
     def parse_docx(file_data: bytes) -> Dict[str, Any]:
@@ -143,7 +148,7 @@ class DocumentParser:
             }
 
         except Exception as e:
-            raise ValueError(f"Failed to parse DOCX: {str(e)}")
+            raise DocumentParsingException("unknown", "docx", str(e))
 
     @staticmethod
     def parse_text(file_data: bytes) -> Dict[str, Any]:
@@ -164,7 +169,7 @@ class DocumentParser:
             try:
                 text = file_data.decode('latin-1')
             except Exception as e:
-                raise ValueError(f"Failed to decode text file: {str(e)}")
+                raise DocumentParsingException("unknown", "txt", f"Failed to decode: {str(e)}")
 
         # Clean the text
         cleaned_text = DocumentParser.clean_text(text)
@@ -255,20 +260,15 @@ class DocumentParser:
 
         # Get parser
         parser = parsers.get(f"{file_type}")
+        supported_types = list(set(k.lstrip('.') for k in parsers.keys()))
         if not parser:
-            raise ValueError(
-                f"Unsupported file type: {file_type}. "
-                f"Supported: {list(set(k.lstrip('.') for k in parsers.keys()))}"
-            )
+            raise UnsupportedFileTypeException(file_type, supported_types)
 
         # Parse
         result = parser(file_data)
 
         # Validate extraction
         if not result["text"] or len(result["text"].strip()) < 10:
-            raise ValueError(
-                "Extracted text is too short. File may be empty, corrupted, "
-                "or contain only images (OCR not supported)."
-            )
+            raise InsufficientContentException("unknown")
 
         return result

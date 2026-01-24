@@ -23,7 +23,13 @@ from app.utils.document_storage import storage_service
 from app.utils.embeddings import get_shared_embedder, embed_chunks
 from app.utils.semantic_chunker import HybridChunker, SemanticChunker
 from app.core.settings import settings
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
+from app.core.exceptions import (
+    UnsupportedFileTypeException, 
+    DocumentException,  
+    InsufficientContentException,
+    InvalidType
+)
 from app.schemas import FileUploadResult, UploadStatus
 
 logger = logging.getLogger(__name__)
@@ -76,10 +82,7 @@ class IngestionService:
         if f".{file_ext}" not in allowed_extensions:
             logger.warning(f"[{file_number}/{total_files}] Skipped (unsupported): {filename}")
             if total_files == 1:
-                raise FileUploadResult(
-                    status_code=400,
-                    detail=f"Unsupported file type: {file_ext}. Allowed: {allowed_extensions}"
-                )
+                raise UnsupportedFileTypeException(file_ext, list(allowed_extensions))
             return FileUploadResult(
                 filename=filename,
                 status=UploadStatus.FAILED,
@@ -148,10 +151,14 @@ class IngestionService:
                 f"[{file_number}/{total_files}] Failed: {filename} - {error_msg}"
             )
             if total_files == 1:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error processing document: {str(e)}"
-                )
+                raise DocumentException(f"Error processing document '{filename}': {str(e)}")
+
+            return FileUploadResult(
+                filename=filename,
+                status=UploadStatus.FAILED,
+                error_message=error_msg,
+                processing_time=round(processing_time, 2)
+            )
         
     async def process_files_concurrently(
         self,
@@ -278,23 +285,18 @@ class IngestionService:
                     # Clean up failed/processing document
                     await self._cleanup_document(session, existing_doc)
 
-            try:
-                document_id = await self._process_document(
-                    session=session,
-                    file_data=file_data,
-                    filename=filename,
-                    file_type=file_type,
-                    file_hash=file_hash,
-                    domain_id=domain_id,
-                    owner_id=owner_id,
-                    is_public=is_public,
-                    metadata=metadata,
-                )
-                return document_id, False
-
-            except Exception as e:
-                logger.error(f"Ingestion failed: {e}")
-                raise
+            document_id = await self._process_document(
+                session=session,
+                file_data=file_data,
+                filename=filename,
+                file_type=file_type,
+                file_hash=file_hash,
+                domain_id=domain_id,
+                owner_id=owner_id,
+                is_public=is_public,
+                metadata=metadata,
+            )
+            return document_id, False
 
     async def _cleanup_document(self, session, document: Document) -> None:
         """Clean up a failed or incomplete document."""
@@ -349,16 +351,13 @@ class IngestionService:
             parsed_result = DocumentParser.parse(file_data, file_type)
 
             if not isinstance(parsed_result, dict):
-                raise ValueError(f"Parser returned {type(parsed_result)} instead of dict")
+                raise InvalidType("parsed_result", str({type(parsed_result)}), "dict")
 
             parsed_text = parsed_result["text"]
             parse_metadata = parsed_result.get("metadata", {})
 
             if len(parsed_text) < 10:
-                raise ValueError(
-                    f"Extracted text too short ({len(parsed_text)} chars). "
-                    "File may be scanned/image-based or corrupted."
-                )
+                raise InsufficientContentException(filename)
 
             if isinstance(parse_metadata, dict):
                 document.metadata_ = {**(metadata or {}), **parse_metadata}

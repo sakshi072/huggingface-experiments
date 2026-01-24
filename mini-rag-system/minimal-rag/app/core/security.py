@@ -10,9 +10,10 @@ from functools import lru_cache
 import httpx
 from jose import jwt, JWTError
 from jose.exceptions import ExpiredSignatureError, JWTClaimsError
-from fastapi import HTTPException, status, Security
+from fastapi import Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.settings import settings
+from app.core.exceptions import InvalidTokenException, ExpiredTokenException, InsufficientPermissionsException
 
 logger = logging.getLogger(__name__)
 
@@ -198,14 +199,11 @@ def verify_jwt(
         Decoded token payload
 
     Raises:
-        HTTPException: 401 if token invalid
+        InvalidTokenException: If token is missing or invalid
+        ExpiredTokenException: If token has expired
     """
     if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authentication": "Bearer"}
-        )
+        raise InvalidTokenException("Missing Authorization header")
 
     token = credentials.credentials
 
@@ -213,11 +211,10 @@ def verify_jwt(
         payload = validate_jwt_token(token)
         return payload
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Invalid token: {e}",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
+        error_msg = str(e)
+        if "expired" in error_msg.lower():
+            raise ExpiredTokenException()
+        raise InvalidTokenException(error_msg)
 
 
 def require_scope(required_scope: str):
@@ -243,14 +240,7 @@ def require_scope(required_scope: str):
         """Check if token has required scope"""
         if not has_scope(required_scope, token):
             scopes = extract_scopes(token)
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    "error": "INSUFFICIENT_PERMISSIONS",
-                    "message": f"Required scope '{required_scope}' not found",
-                    "available_scopes": scopes
-                }
-            )
+            raise InsufficientPermissionsException(required_scope, scopes)
         return token
 
     return scope_checker

@@ -4,11 +4,12 @@ Search and query endpoints
 import time
 import logging
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_vectore_storage_retrieval
 from app.core import require_scope, extract_scopes
 from app.schemas import SearchRequest, SearchResponse, SourceReference, SearchHistory, SearchResult
+from app.core.exceptions import ServiceUnavailableException
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,7 @@ async def search_documents(
     """
     vectore_storage_retrieval = get_vectore_storage_retrieval()
     if vectore_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
     
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -113,10 +111,7 @@ async def search_history(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
     
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -153,11 +148,8 @@ async def search_history_by_search_id(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
-    
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
+
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
 

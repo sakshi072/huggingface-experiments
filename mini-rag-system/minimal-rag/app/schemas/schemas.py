@@ -3,7 +3,7 @@ Pydantic schemas for API request/response validation.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from enum import Enum
 
 
@@ -321,13 +321,54 @@ class StatResponse(BaseModel):
 class ErrorResponse(BaseModel):
     """Error response schema."""
 
-    error: str = Field(..., description="Error Message")
-    detail: Optional[str] = Field(None, description="Detailed error information")
+    error: int = Field(..., description="Error Code")
+    message: str = Field(..., description="Human-readable error message")
+    detail: Optional[Dict[str, Any]] = Field(None, description="Additional error context (request_id, error_code, etc.")
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "error": "Invalid file type",
-                "detail": "Only .txt, .pdf, .md files are supported"
-            }
+            "examples": [
+                {
+                    "error": 404,
+                    "message": "Document not found",
+                    "detail": {
+                        "request_id": "gen-a1b2c3d4",
+                        "error_code": "DOCUMENT_NOT_FOUND",
+                        "document_id": "123e4567-e89b-12d3-a456-426614174000"
+                    }
+                },
+                {
+                    "error": 400,
+                    "message": "File type '.exe' is not supported",
+                    "detail": {
+                        "request_id": "gen-xyz789",
+                        "error_code": "UNSUPPORTED_FILE_TYPE",
+                        "received_type": "exe",
+                        "supported_types": ["pdf", "docx", "txt", "md"]
+                    }
+                },
+                {
+                    "error": 422,
+                    "message": "Request validation failed",
+                    "detail": {
+                        "request_id": "gen-abc123",
+                        "error_code": "VALIDATION_ERROR",
+                        "errors": [
+                            {
+                                "field": "query",
+                                "message": "field required",
+                                "type": "value_error.missing"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "error": 500,
+                    "message": "A database error occurred. Please try again later.",
+                    "detail": {
+                        "request_id": "gen-def456",
+                        "error_code": "DATABASE_ERROR"
+                    }
+                }
+            ]
         }

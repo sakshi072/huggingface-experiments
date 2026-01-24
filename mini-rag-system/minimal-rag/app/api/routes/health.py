@@ -1,10 +1,11 @@
 """
 Health and system status endpoints
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app.api.dependencies import get_vectore_storage_retrieval
 from app.schemas import HealthResponse, StatResponse
+from app.core.exceptions import ServiceUnavailableException
 
 router = APIRouter(prefix="", tags=["System"])
 
@@ -50,10 +51,7 @@ async def health_check():
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="RAG system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
 
     components = {
         "vector_storage_retrieval": "ok",
@@ -79,10 +77,7 @@ async def get_stats():
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
 
     stats = await vector_storage_retrieval.get_stats()
 

@@ -10,8 +10,26 @@ from app.core.security import (
 )
 from app.core.feature_flags import feature_flags, FeatureFlags
 from app.core.settings import settings
-from app.core.exception_handler import general_exception_handler, http_exception_handler
+from app.core.exception_handler import register_exception_handlers
 from app.core.middleware import TracingMiddleware
+from app.core.exceptions import (
+    RetrievalBaseException,
+    ValidationException,
+    AuthException,
+    StorageException,
+    DatabaseException,
+    ServiceUnavailableException,
+    DocumentNotFound,
+    DocumentParsingException,
+    DocumentTooLargeException,
+    DuplicateDocumentException,
+    InsufficientContentException,
+    InvalidTokenException,
+    ExpiredTokenException,
+    InsufficientPermissionsException,
+    InvalidParameterException,
+    InvalidType
+)
 
 __all__ = [
     "verify_jwt",
@@ -22,7 +40,22 @@ __all__ = [
     "feature_flags",
     "FeatureFlags",
     "settings",
-    "general_exception_handler",
-    "http_exception_handler",
-    "TracingMiddleware"
+    "register_exception_handlers",
+    "TracingMiddleware",
+    "RetrievalBaseException",
+    "ValidationException",
+    "AuthException",
+    "StorageException",
+    "DatabaseException",
+    "ServiceUnavailableException",
+    "DocumentNotFound",
+    "DocumentParsingException",
+    "DocumentTooLargeException",
+    "DuplicateDocumentException",
+    "InsufficientContentException",
+    "InvalidTokenException",
+    "ExpiredTokenException",
+    "InsufficientPermissionsException",
+    "InvalidParameterException",
+    "InvalidType"
 ]

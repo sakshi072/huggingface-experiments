@@ -3,11 +3,16 @@ Document management endpoints
 """
 from uuid import UUID
 import time
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Depends
 from app.core import require_scope, extract_scopes
 from app.api.dependencies import get_vectore_storage_retrieval
 from app.schemas import FileUploadResult, DocumentMetadata, DocumentListResponse, BatchUploadResponse, UploadStatus
-import logging 
+from app.core.exceptions import (
+    ServiceUnavailableException,
+    InvalidParameterException,
+    DocumentNotFound
+)
+import logging
 from typing import List
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -37,10 +42,7 @@ async def ingest_document(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
     
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -57,7 +59,7 @@ async def ingest_document(
 
 @router.post("/batch", response_model=BatchUploadResponse)
 async def batch_ingest_document(
-    files: List[UploadFile] = File(..., description="Multiple files to upload (max 20)"),
+    files: List[UploadFile] = File(...,description="Multiple files to upload (max 20)"),
     domain: str = "general",
     token: dict = Depends(require_scope("search:knowledge"))
 ):
@@ -80,24 +82,12 @@ async def batch_ingest_document(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
     
     # Validate inputs
-    MAX_FILES = 20
+    MAX_FILES = 1
     if len(files) > MAX_FILES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Maximum {MAX_FILES} files allowed per batch, Received {len(files)}"
-        )
-    
-    if len(files) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="No files provided. Please upload at least one file."
-        )
+        raise InvalidParameterException("total_files", len(files), f"Maximum {MAX_FILES} files allowed per batch")
     
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -172,10 +162,7 @@ async def list_documents(
     vector_storage_retrieval = get_vectore_storage_retrieval()
 
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
 
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -220,10 +207,7 @@ async def get_document(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
 
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -235,16 +219,12 @@ async def get_document(
     try:
         doc_uuid = UUID(document_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid document ID format")
+        raise InvalidParameterException("Document_id", document_id, "Document ID not in UUID format")
 
     doc = await vector_storage_retrieval.get_document(doc_uuid)
 
     if doc is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document not found: {document_id}"
-        )
-
+        raise DocumentNotFound(document_id)
     return doc
 
 @router.delete("/{document_id}")
@@ -264,10 +244,7 @@ async def delete_document(
     """
     vector_storage_retrieval = get_vectore_storage_retrieval()
     if vector_storage_retrieval is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Vector Storage and Retrieval system not initialized"
-        )
+        raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
 
     client_id = token.get("sub", "unknown")
     scopes = extract_scopes(token)
@@ -279,15 +256,12 @@ async def delete_document(
     try:
         doc_uuid = UUID(document_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid document ID format")
+        raise InvalidParameterException("Document_id", document_id, "Document ID not in UUID format")
 
     deleted = await vector_storage_retrieval.delete_document(doc_uuid)
 
     if not deleted:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Document not found: {document_id}"
-        )
+        raise DocumentNotFound(document_id)
 
     return {
         "message": "Document deleted successfully",

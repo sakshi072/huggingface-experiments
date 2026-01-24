@@ -14,7 +14,7 @@ from app.utils.document_storage import storage_service
 from app.api.dependencies import set_vectore_storage_retrieval
 from app.api.routes import documents, search, health
 from fastapi.security import HTTPBearer
-from app.core.exception_handler import general_exception_handler, http_exception_handler
+from app.core.exception_handler import register_exception_handlers
 from app.core.middleware import TracingMiddleware
 import logging
 
@@ -75,9 +75,8 @@ app = FastAPI(
 
 security = HTTPBearer()
 
-app.add_exception_handler(Exception, general_exception_handler)
-app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_middleware(TracingMiddleware)
+register_exception_handlers(app)
 
 # Include routers
 app.include_router(health.router)
