@@ -22,7 +22,6 @@ build/
 
 # Environment
 .env
-.env.local
 
 # Git
 .git
