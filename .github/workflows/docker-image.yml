@@ -63,14 +63,19 @@ jobs:
             dockerfile: ./Multi-Agent-Chat-System/chat-ui/Dockerfile
     
     steps: 
-      - name: Free Disk Space
+      - name: Free up disk space
         if: contains(needs.detect-changes.outputs.services, matrix.service.name)
         run: |
+          echo "=== Disk space before cleanup ==="
+          df -h
+          echo "=== Removing unnecessary files ==="
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker system prune -af --volumes
+          echo "=== Disk space after cleanup ==="
+          df -h
       - name: Check Disk Space
         run: df -h
       - name: Checkout
@@ -112,8 +117,12 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+          
+      - name: Cleanup after build
+        if: contains(needs.detect-changes.outputs.services, matrix.service.name)
+        run: |
+          docker system prune -f
+          df -h    
           
       - name: Build Summary
         if: contains(needs.detect-changes.outputs.services, matrix.service.name)
