@@ -63,6 +63,16 @@ jobs:
             dockerfile: ./Multi-Agent-Chat-System/chat-ui/Dockerfile
     
     steps: 
+      - name: Free Disk Space
+        if: contains(needs.detect-changes.outputs.services, matrix.service.name)
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf "/usr/local/share/boost"
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+      - name: Check Disk Space
+        run: df -h
       - name: Checkout
         if: contains(needs.detect-changes.outputs.services, matrix.service.name)
         uses: actions/checkout@v4
