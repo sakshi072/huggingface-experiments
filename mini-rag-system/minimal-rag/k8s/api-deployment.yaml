@@ -79,7 +79,7 @@ spec:
       
       containers:
       - name: api
-        image: sakshitayal712/mini_rag:mini_rag-0a71c87
+        image: sakshitayal712/mini_rag:mini_rag-e879c9c
         imagePullPolicy: Always
 
         ports:

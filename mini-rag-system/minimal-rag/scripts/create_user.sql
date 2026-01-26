@@ -4,7 +4,7 @@
 CREATE USER rag_user WITH PASSWORD 'rag_password';
 
 -- Grant all privileges on database
-GRANT ALL PRIVILEGES ON DATABASE rag_db TO rag_user;
+GRANT ALL PRIVILEGES ON DATABASE retrieval_db TO rag_user;
 
 -- Grant schema permissions
 GRANT ALL PRIVILEGES ON SCHEMA public TO rag_user;

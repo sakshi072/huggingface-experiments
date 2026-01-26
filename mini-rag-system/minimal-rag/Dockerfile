@@ -26,8 +26,15 @@ RUN poetry install --no-interaction --no-ansi --no-root && \
 # Verify critical packages are installed
 RUN python -c "import fastapi; import uvicorn; print('All packages installed')"
 
+# Pre-download embedding model (avoids runtime download)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')"
+
+# Create non-root user (matches K8s securityContext runAsUser: 1000)
+RUN groupadd -g 1000 appgroup && \
+    useradd -u 1000 -g appgroup -m -s /bin/bash appuser
+
 # Copy application code
-COPY . .
+COPY --chown=appuser:appgroup . .
 
 # 1. Make the entrypoint script executable
 RUN chmod +x /app/entrypoint.sh
@@ -35,6 +42,9 @@ RUN chmod +x /app/entrypoint.sh
 # 2. Use the script as the entrypoint
 # This allows you to pass arguments to the script via 'docker run'
 ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Switch to non-root user
+USER appuser
 
 # 3. Default argument passed to the ENTRYPOINT
 CMD ["api"]
