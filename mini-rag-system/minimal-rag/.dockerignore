@@ -39,3 +39,6 @@ tests/
 # Logs
 *.log
 logs/
+
+data/
+models/

@@ -19,7 +19,9 @@ COPY pyproject.toml poetry.lock* ./
 RUN poetry config virtualenvs.create false
 
 # Install dependencies
-RUN poetry install --no-interaction --no-ansi --no-root
+RUN poetry install --no-interaction --no-ansi --no-root && \
+    rm -rf /root/.cache/pypoetry && \
+    rm -rf /root/.cache/pip
 
 # Verify critical packages are installed
 RUN python -c "import fastapi; import uvicorn; print('All packages installed')"
