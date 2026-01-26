@@ -9,7 +9,7 @@ metadata:
     version: v1.0.0
 
 spec:
-  replicas: 3
+  replicas: 1
 
   # Deployment strategy
   strategy:
@@ -58,7 +58,7 @@ spec:
         - -c
         - |
           echo "Waiting for PostgreSQL..."
-          until nc -z postgres 5432; do
+          until nc -z postgres-headless 5432; do
             echo "PostgreSQL is not ready yet - sleeping"
             sleep 2
           done
@@ -71,7 +71,7 @@ spec:
         - -c
         - |
           echo "Waiting for MinIO..."
-          until nc -z minio 9000; do
+          until nc -z minio-headless 9000; do
             echo "MinIO is not ready yet - sleeping"
             sleep 2
           done
