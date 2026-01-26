@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: retrieval-config
+  namespace: retrieval-system
+  labels:
+    app: retrieval-vector-storage
+
+data:
+  ENV: "development"
+  DEBUG: "false"
+
+  # PostgreSQL Configuration (non-sensitive)
+  POSTGRES_DB: "retrieval-db"
+  POSTGRES_USER: "postgres"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+
+  # MinIO Configuration
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_BUCKET: "document-storage"
+  MINIO_SECURE: "false"
+
+  # Redis Configuration
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+
+  # Embedding and Chunking Configuration
+  EMBEDDING_MODEL: "sentence-transformers/all-MiniLM-L6-v2"
+  CHUNKING_STRATEGY: "recursive_split"
+  CHUNK_SIZE: "512"
+  CHUNK_OVERLAP: "50"
+
+  # Feature Flags
+  FEATURE_SEMANTIC_CHUNKING: "false"
+  FEATURE_RERANKING: "false"
+  FEATURE_RERANK_MULTIPLIER: "3"
+  
+  # Reranking Configuration
+  RERANK_STRATEGY: "combined"  # similarity | quality | hybrid | mmr | combined
+  RERANK_QUALITY_WEIGHT: "0.2"
+  RERANK_ALPHA: "0.7"
+  RERANK_LAMBDA: "0.5"
+  RERANK_MAX_CHUNKS_PER_DOC: "2"
+

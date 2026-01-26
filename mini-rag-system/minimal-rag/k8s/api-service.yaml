@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: retrieval-api
+  namespace: retrieval-system
+  labels:
+    app: retrieval-api
+    component: backend
+
+spec:
+  type: ClusterIP
+
+  ports:
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: http
+
+  selector:
+    app: retrieval-api

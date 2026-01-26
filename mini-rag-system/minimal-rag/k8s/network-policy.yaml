@@ -1,0 +1,142 @@
+# Default deny all ingress traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: retrieval-system
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+
+---
+# Allow API pods to receive traffic from Ingress
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-api
+  namespace: retrieval-system
+spec:
+  podSelector:
+    matchLabels:
+      app: retrieval-api
+  
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8001
+
+---
+# Allow API to access PostreSQL
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-postgres
+  namespace: retrieval-system
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow traffic from API pods only
+  - from:
+    - podSelector:
+        matchLabels:
+          name: retrieval-api
+    ports:
+    - protocol: TCP
+      port: 5432
+
+---
+# Allow API to access MinIO
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-minio
+  namespace: retrieval-system
+spec:
+  podSelector:
+    matchLabels:
+      app: minio
+  
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow API pods to access MinIO API
+  - from:
+    - podSelector:
+        matchLabels:
+          name: retrieval-api
+    ports:
+    - protocol: TCP
+      port: 9000
+
+  # Allow Ingress to access MinIO console
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    
+    ports:
+    - protocol: TCP
+      port: 9001
+
+---
+# Allow API to access Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-to-redis
+  namespace: retrieval-system
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  
+  policyTypes:
+  - Ingress
+
+  ingress:
+  # Allow traffic from API pods only
+  - from:
+    - podSelector:
+        matchLabels:
+          name: retrieval-api
+    ports:
+    - protocol: TCP
+      port: 6379
+
+---
+# Allow DNS queries (required for all pods)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: retrieval-system
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  
+  egress:
+  # Allow DNS queries to kube-dns/CoreDNS
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53

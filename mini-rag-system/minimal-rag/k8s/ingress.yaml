@@ -1,0 +1,82 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: 
+  name: retrieval-ingress
+  namespace: retrieval-system
+  labels:
+    app: retrieval-system
+  annotations:
+    # Ingress class (nginx, traefik, etc.)
+    kubernetes.io/ingress.class: "nginx"
+
+    # CORS configuration
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, OPTIONS, DELETE"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization"
+
+    # SSL redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+
+    # Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"  # ← Allow large file uploads
+
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+
+    # Rate limiting (optional)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+
+    # Certificate manager (for automatic HTTPS)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+spec:
+  rules:
+  - host: retrieval.local
+    http:
+      paths:
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: retrieval-api
+            port:
+              number: 8001
+      
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: retrieval-api
+            port:
+              number: 8001
+      
+      - path: /documents
+        pathType: Prefix
+        backend:
+          service:
+            name: retrieval-api
+            port:
+              number: 8001
+      
+      - path: /search
+        pathType: Prefix
+        backend:
+          service:
+            name: retrieval-api
+            port:
+              number: 8001
+  
+  - host: minio.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: minio
+            port:
+              number: 9001 

@@ -1,0 +1,188 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-api
+  namespace: retrieval-system
+  labels:
+    app: retrieval-api
+    component: backend
+    version: v1.0.0
+
+spec:
+  replicas: 3
+
+  # Deployment strategy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  selector:
+    matchLabels:
+      app: retrieval-api
+
+  template:
+    metadata:
+      labels:
+        app: retrieval-api
+        component: backend
+        version: v1.0.0
+
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - retrieval-api
+              topologyKey: kubernetes.io/hostname
+
+      # Security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      # Init container: wait for dependencies
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL..."
+          until nc -z postgres 5432; do
+            echo "PostgreSQL is not ready yet - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+      
+      - name: wait-for-minio
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for MinIO..."
+          until nc -z minio 9000; do
+            echo "MinIO is not ready yet - sleeping"
+            sleep 2
+          done
+          echo "MinIO is ready!"
+      
+      containers:
+      - name: api
+        image: sakshitayal712/mini_rag:mini_rag-0a71c87
+        imagePullPolicy: Always
+
+        ports:
+        - containerPort: 8001
+          name: http
+          protocol: TCP
+        
+
+        envFrom:
+        - configMapRef:
+            name: retrieval-config
+
+        # Environment variables from Secrets
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: POSTGRES_PASSWORD
+        
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: MINIO_ROOT_USER
+        
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: MINIO_ROOT_PASSWORD
+        
+        - name: AUTH0_DOMAIN
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: AUTH0_DOMAIN
+        
+        - name: AUTH0_AUDIENCE
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: AUTH0_AUDIENCE
+        
+        # Resource limits
+        resources:
+          requests:
+            cpu: "500m"      # ← 0.5 CPU cores guaranteed
+            memory: "1Gi"    # ← 1GB RAM guaranteed
+          limits:
+            cpu: "2000m"     # ← Max 2 CPU cores
+            memory: "4Gi"    # ← Max 4GB RAM
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+            scheme: HTTP
+          initialDelaySeconds: 60   # ← Wait 60s for model loading
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        # Startup probe (for embedding model loading)
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8001
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 12  # ← Allow up to 2 minutes for startup
+        
+        # Security context (container level)
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false  # ← FastAPI needs to write logs
+          capabilities:
+            drop:
+            - ALL
+        
+      # Restart policy
+      restartPolicy: Always
+      
+      # DNS policy
+      dnsPolicy: ClusterFirst
+      
+      # Termination grace period (time to finish requests before force kill)
+      terminationGracePeriodSeconds: 30
+          
+    
+
+
+

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: retrieval-system
+  labels:
+    name: retrieval-system
+    environment: development
+    app: retrieval-vector-storage
