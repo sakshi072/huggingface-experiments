@@ -1,0 +1,57 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hugg-backend-ingress
+  namespace: retrieval-system
+  labels:
+    app: hugg-backend
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    
+    # CORS configuration - Allow external UI to connect
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "http://localhost:5173, http://127.0.0.1:5173"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Authorization,chat-id,X-Request-ID,X-Correlation-ID"
+    nginx.ingress.kubernetes.io/cors-allow-credentials: "true"
+    
+    # SSL redirect
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # Changed to false for local development
+    
+    # Request size limits
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    
+    # Timeouts
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+  
+spec:
+  rules:
+  - host: api.hugg-chat.local
+    http:
+      paths:
+      - path: /health
+        pathType: Prefix
+        backend:
+          service:
+            name: hugg-backend
+            port:
+              number: 8000
+      - path: /chat
+        pathType: Prefix
+        backend:
+          service:
+            name: hugg-backend
+            port:
+              number: 8000
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: hugg-backend
+            port:
+              number: 8000

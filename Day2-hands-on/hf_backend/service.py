@@ -1,13 +1,13 @@
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from typing import List, Dict, Optional, Tuple
-from .config import (
-    HF_CLIENT, MODEL_ID, 
+from config import (
+    HF_CLIENT, MODEL_ID,
     SYSTEM_MESSAGE_INFERENCE, logger, MAX_TOKENS, TEMPERATURE
 )
-from .models import HistoryMessage, ChatSessionMetadata
-from .mongodb_client_handler import MONGO_CHAT_CLIENT
-from .rag_client import get_rag_client, get_rag_tool_definition, format_tool_response
+from models import HistoryMessage, ChatSessionMetadata
+from mongodb_client_handler import MONGO_CHAT_CLIENT
+from rag_client import get_rag_client, get_rag_tool_definition, format_tool_response
 import json
 import re
 from langchain_openai import ChatOpenAI
@@ -15,14 +15,14 @@ from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
-from .langchain_rag_tool import search_knowledge_base
+from langchain_rag_tool import search_knowledge_base
 from datetime import datetime
 import os
 from dotenv import load_dotenv
-from .web_search_client import search_web
-from .job_search_tool import get_job_search_tool
-from .token_tracker import SimpleTokenTracker
-from.log_llm_request import RequestLogger
+from web_search_client import search_web
+from job_search_tool import get_job_search_tool
+from token_tracker import SimpleTokenTracker
+from log_llm_request import RequestLogger
 from langfuse.langchain import CallbackHandler
 
 load_dotenv()

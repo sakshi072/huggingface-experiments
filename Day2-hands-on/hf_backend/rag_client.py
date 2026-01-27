@@ -1,11 +1,12 @@
 """
 RAG Client with OAuth 2.0 Client Credentials authentication
 """
+import os
 import httpx
 import logging
 from typing import Optional, List, Dict
 
-from .auth0_token_manager import get_access_token
+from auth0_token_manager import get_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ def get_rag_client() -> RAGClient:
     """Get global RAG client"""
     global _rag_client
     if _rag_client is None:
-        _rag_client = RAGClient()
+        rag_url = os.getenv("RAG_SERVICE_URI", "http://localhost:8001")
+        _rag_client = RAGClient(rag_url=rag_url)
     return _rag_client
 
 def get_rag_tool_definition() -> dict:

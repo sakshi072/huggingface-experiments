@@ -2,7 +2,7 @@ import os
 import logging
 from typing import Dict, Optional
 from huggingface_hub import InferenceClient
-from .models import HistoryMessage
+from models import HistoryMessage
 from pymongo import MongoClient # New Import
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError

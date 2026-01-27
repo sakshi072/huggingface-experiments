@@ -3,17 +3,17 @@ from typing import Optional
 import uuid
 from contextlib import asynccontextmanager
 
-from . import service
-from .models import (
-    ChatPrompt, InferenceResponse, HistoryResponse, 
+import service
+from models import (
+    ChatPrompt, InferenceResponse, HistoryResponse,
     CreateChatRequest, CreateChatResponse, ChatSessionsResponse,  # Fixed typo
     UpdateTitleRequest, GenerateTitleRequest, GenerateTitleResponse,
     HealthCheckResponse, PaginationParams
 )
-from .config import logger, mongo_manager
+from config import logger, mongo_manager
 from fastapi.middleware.cors import CORSMiddleware
-from .auth0 import get_current_user_id
-from .log_llm_request import log_request
+from auth0 import get_current_user_id
+from log_llm_request import log_request
 
 # ===== APPLICATION LIFECYCLE =====
 

@@ -5,7 +5,7 @@ Simpler, cleaner implementation wrapping your existing RAG service
 """
 import logging
 from langchain.tools import tool
-from .rag_client import get_rag_client
+from rag_client import get_rag_client
 
 logger = logging.getLogger(__name__)
 

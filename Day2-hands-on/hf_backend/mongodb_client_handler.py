@@ -7,11 +7,11 @@ import uuid
 import base64
 import json
 
-from .config import get_db, logger
-from .models import (
-    HistoryMessage, ChatSessionMetadata, 
-    MessageDocument, ChatMetadataDocument, 
-    CursorInfo 
+from config import get_db, logger
+from models import (
+    HistoryMessage, ChatSessionMetadata,
+    MessageDocument, ChatMetadataDocument,
+    CursorInfo
 )
 
 CHAT_METADATA_COLLECTION = "chat-metadata"
