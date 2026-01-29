@@ -4,7 +4,7 @@ metadata:
   name: retrieval-api
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
     version: {{ .Chart.AppVersion }}
 spec:
   {{- if not .Values.autoscaling.enabled }}
@@ -19,12 +19,12 @@ spec:
 
   selector:
     matchLabels:
-      {{- include "retrieval-system.api.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.api.selectorLabels" . | nindent 6 }}
 
   template:
     metadata:
       labels:
-        {{- include "retrieval-system.api.labels" . | nindent 8}}
+        {{- include "agent-service.api.labels" . | nindent 8}}
         version: {{ .Chart.AppVersion }}
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}

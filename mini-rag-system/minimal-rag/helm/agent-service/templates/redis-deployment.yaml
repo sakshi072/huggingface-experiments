@@ -5,19 +5,19 @@ metadata:
   name: redis
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.redis.labels" . | nindent 4 }}
+    {{- include "agent-service.redis.labels" . | nindent 4 }}
 
 spec:
   replicas: 1
 
   selector:
     matchLabels:
-      {{- include "retrieval-system.redis.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.redis.selectorLabels" . | nindent 6 }}
   
   template:
     metadata:
       labels:
-        {{- include "retrieval-system.redis.labels" . | nindent 8 }}
+        {{- include "agent-service.redis.labels" . | nindent 8 }}
 
     spec:
       containers:

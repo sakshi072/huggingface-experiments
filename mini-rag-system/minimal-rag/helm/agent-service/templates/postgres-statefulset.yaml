@@ -5,7 +5,7 @@ metadata:
   name: postgres
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.postgres.labels" . | nindent 4 }}
+    {{- include "agent-service.postgres.labels" . | nindent 4 }}
 
 spec:
   serviceName: postgres-headless
@@ -13,12 +13,12 @@ spec:
 
   selector:
     matchLabels:
-      {{- include "retrieval-system.postgres.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.postgres.selectorLabels" . | nindent 6 }}
 
   template:
     metadata:
       labels:
-        {{- include "retrieval-system.postgres.labels" . | nindent 8 }}
+        {{- include "agent-service.postgres.labels" . | nindent 8 }}
         
     spec:
       securityContext:
@@ -107,7 +107,7 @@ spec:
   - metadata:
       name: postgres-storage
       labels:
-        {{- include "retrieval-system.postgres.labels" . | nindent 8 }}
+        {{- include "agent-service.postgres.labels" . | nindent 8 }}
     spec:
       accessModes:
         - ReadWriteOnce

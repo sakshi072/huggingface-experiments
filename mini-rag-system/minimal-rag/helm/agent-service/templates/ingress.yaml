@@ -5,7 +5,7 @@ metadata:
   name: retrieval-ingress
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
   {{- with .Values.ingress.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}

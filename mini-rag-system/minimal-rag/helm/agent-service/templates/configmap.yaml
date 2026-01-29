@@ -4,7 +4,7 @@ metadata:
     name: retrieval-config
     namespace: {{ .Values.global.namespace }}
     labels:
-        {{- include "retrieval-system.labels" . | nindent 4}}
+        {{- include "agent-service.labels" . | nindent 4}}
 
 data:
     ENV: {{ .Values.config.env | quote }}

@@ -1,7 +1,7 @@
 # Global Settings
 global:
   environment: development
-  namespace: retrieval-system
+  namespace: agent-service
 
 # API service configuration
 api:
@@ -158,13 +158,13 @@ config:
 # Secrets Configuration
 secrets:
   postgresql:
-    password: "postgres_password"
+    password: rag_password
   minio:
-    rootUser: "minio_root_user"
-    rootPassword: "minio_root_password"
+    rootUser: minioadmin
+    rootPassword: minioadmin123
   auth0:
-    domain: "auth0-domain"
-    audience: "auth0_adience"
+    domain: dev-gonhj56z7406v147.us.auth0.com
+    audience: https://api.rag-service.com
 
 # Horizontal Pod Autoscalar
 autoscaling:

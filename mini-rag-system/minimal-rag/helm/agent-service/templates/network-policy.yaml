@@ -4,10 +4,10 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: default-deny-ingress
+  name: {{ .Release.Name }}-default-deny-ingress  
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:
@@ -18,14 +18,14 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-ingress-to-api
+  name: {{ .Release.Name }}-allow-ingress-to-api
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "retrieval-system.api.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.api.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
@@ -44,14 +44,14 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-to-postgres
+  name: {{ .Release.Name }}-allow-api-to-postgres
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "retrieval-system.postgres.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.postgres.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
@@ -60,7 +60,7 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
+          {{- include "agent-service.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
       port: {{ .Values.postgresql.service.port }}
@@ -70,14 +70,14 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-to-minio
+  name: {{ .Release.Name }}-allow-api-to-minio
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "retrieval-system.minio.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.minio.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
@@ -86,7 +86,7 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
+          {{- include "agent-service.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
       port: {{ .Values.minio.service.apiPort }}
@@ -104,14 +104,14 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-api-to-redis
+  name: {{ .Release.Name }}-allow-api-to-redis
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      {{- include "retrieval-system.redis.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.redis.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
@@ -120,7 +120,7 @@ spec:
   - from:
     - podSelector:
         matchLabels:
-          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
+          {{- include "agent-service.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
       port: {{ .Values.redis.service.port }}
@@ -131,10 +131,10 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-dns
+  name: {{ .Release.Name }}-allow-dns
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.labels" . | nindent 4 }}
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:

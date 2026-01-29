@@ -50,6 +50,7 @@ class StorageService:
                 logger.info(f"Created MinIO bucket: {self.bucket_name}")
         except S3Error as e:
             logger.error(f"Error checking/creating bucket: {e}")
+            raise StorageException(f"Failed to create bucket: {self.bucket_name}", details={"reason": str(e)})  
 
     def generate_object_key(self, filename: str) -> str:
         """

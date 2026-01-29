@@ -5,7 +5,7 @@ metadata:
   name: postgres-init-scripts
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.postgres.labels" . | nindent 4 }}
+    {{- include "agent-service.postgres.labels" . | nindent 4 }}
 data:
   # Scripts run in alphabetical order, so we prefix with numbers
   01-create-user.sql: |

@@ -5,7 +5,7 @@ metadata:
   name: minio
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.minio.labels" . | nindent 4 }}
+    {{- include "agent-service.minio.labels" . | nindent 4 }}
 
 spec:
   serviceName: minio-headless
@@ -13,12 +13,12 @@ spec:
 
   selector:
     matchLabels:
-      {{- include "retrieval-system.minio.selectorLabels" . | nindent 6 }}
+      {{- include "agent-service.minio.selectorLabels" . | nindent 6 }}
   
   template:
     metadata:
       labels:
-        {{- include "retrieval-system.minio.labels" . | nindent 8 }}
+        {{- include "agent-service.minio.labels" . | nindent 8 }}
     
     spec:
       securityContext:
@@ -92,7 +92,7 @@ spec:
   - metadata:
       name: minio-storage
       labels:
-        {{- include "retrieval-system.minio.labels" . | nindent 8 }}
+        {{- include "agent-service.minio.labels" . | nindent 8 }}
     spec:
       accessModes:
         - ReadWriteOnce

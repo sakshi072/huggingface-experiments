@@ -5,7 +5,7 @@ metadata:
   name: redis
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.redis.labels" . | nindent 4 }}
+    {{- include "agent-service.redis.labels" . | nindent 4 }}
 
 spec:
   type: ClusterIP
@@ -17,5 +17,5 @@ spec:
     name: redis
 
   selector:
-    {{- include "retrieval-system.redis.selectorLabels" . | nindent 4 }}
+    {{- include "agent-service.redis.selectorLabels" . | nindent 4 }}
 {{- end }}

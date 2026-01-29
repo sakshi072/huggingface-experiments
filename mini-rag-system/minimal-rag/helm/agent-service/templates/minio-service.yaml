@@ -5,7 +5,7 @@ metadata:
   name: minio-headless
   namespace: {{ .Values.global.namespace }}
   labels:
-    {{- include "retrieval-system.minio.labels" . | nindent 4 }}
+    {{- include "agent-service.minio.labels" . | nindent 4 }}
 
 spec:
   type: ClusterIP
@@ -23,5 +23,5 @@ spec:
     name: console
 
   selector:
-    {{- include "retrieval-system.minio.selectorLabels" . | nindent 4 }}
+    {{- include "agent-service.minio.selectorLabels" . | nindent 4 }}
 {{- end }}
