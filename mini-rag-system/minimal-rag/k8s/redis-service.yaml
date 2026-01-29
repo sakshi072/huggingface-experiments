@@ -2,7 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: redis
     component: cache

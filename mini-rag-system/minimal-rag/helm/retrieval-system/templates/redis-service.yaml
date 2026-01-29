@@ -1,0 +1,21 @@
+{{- if .Values.redis.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.redis.labels" . | nindent 4 }}
+
+spec:
+  type: ClusterIP
+
+  ports:
+  - port: {{ .Values.redis.service.port }}
+    targetPort: {{ .Values.redis.service.port }}
+    protocol: TCP
+    name: redis
+
+  selector:
+    {{- include "retrieval-system.redis.selectorLabels" . | nindent 4 }}
+{{- end }}

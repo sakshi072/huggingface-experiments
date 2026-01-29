@@ -1,0 +1,125 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.postgres.labels" . | nindent 4 }}
+
+spec:
+  serviceName: postgres-headless
+  replicas: 1
+
+  selector:
+    matchLabels:
+      {{- include "retrieval-system.postgres.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "retrieval-system.postgres.labels" . | nindent 8 }}
+        
+    spec:
+      securityContext:
+        fsGroup: 999
+    
+      containers:
+      - name: postgres
+        image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+        imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+
+        ports: 
+        - containerPort: {{ .Values.postgresql.service.port }}
+          name: postgres
+          protocol: TCP
+
+        env:
+        - name: POSTGRES_DB
+          value: {{ .Values.postgresql.database.name | quote }}
+
+        # PostgreSQL superuser (for container initialization and init scripts)
+        - name: POSTGRES_USER
+          value: "postgres"
+
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: POSTGRES_PASSWORD
+
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata_v1
+
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+          readOnly: true
+        
+        {{- with .Values.postgresql.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+
+        livenessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        
+        startupProbe:
+          exec:
+            command:
+            - /bin/sh
+            - -c
+            - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+    
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: postgres-init-scripts
+
+  {{- if .Values.postgresql.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-storage
+      labels:
+        {{- include "retrieval-system.postgres.labels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      {{- if .Values.postgresql.persistence.storageClass }}
+      storageClassName: {{ .Values.postgresql.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.postgresql.persistence.size }}
+  {{- else }}
+      - name: postgres-storage
+        emptyDir: {}
+  {{- end }}
+{{- end }}
+    

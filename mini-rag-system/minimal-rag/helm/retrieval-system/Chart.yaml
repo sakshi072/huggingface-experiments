@@ -1,0 +1,28 @@
+apiVersion: v2
+name: retrieval-system
+description: A production-ready Search and Retrieval system with vector storage and semantic search
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+
+keywords:
+  - retrieval-system
+  - rag
+  - semantic search
+  - pgvector
+  - minio
+  - fastapi
+
+maintainers:
+  - name: Sakshi Tayal
+    email: sakshitayal127@gmail.com
+
+dependencies: []
+
+kubeVersion: ">=1.24.0"
+
+home: https://github.com/sakshitayal/mini-rag-system
+sources:
+  - https://github.com/sakshitayal/mini-rag-system
+
+icon: https://raw.githubusercontent.com/cncf/artwork/master/projects/helm/icon/color/helm-icon-color.png

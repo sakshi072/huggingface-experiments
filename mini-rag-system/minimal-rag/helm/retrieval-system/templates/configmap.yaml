@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    name: retrieval-config
+    namespace: {{ .Values.global.namespace }}
+    labels:
+        {{- include "retrieval-system.labels" . | nindent 4}}
+
+data:
+    ENV: {{ .Values.config.env | quote }}
+    DEBUG: {{ .Values.config.debug | quote }}
+
+    # PostgreSQL Configuration
+    POSTGRES_DB: {{ .Values.postgresql.database.name | quote }}
+    POSTGRES_USER: {{ .Values.postgresql.database.user | quote }}
+    POSTGRES_HOST: "postgres-headless"
+    POSTGRES_PORT: {{ .Values.postgresql.service.port | quote }}
+
+    # MinIO Configuration
+    MINIO_ENDPOINT: {{ printf "minio-headless:%d" (int .Values.minio.service.apiPort) | quote }}
+    MINIO_BUCKET: {{ .Values.minio.bucket | quote }}
+    MINIO_SECURE: "false"
+
+    # Redis Configuration
+    REDIS_HOST: "redis"
+    REDIS_PORT: {{ .Values.redis.service.port | quote }}
+
+    # Embedding and chunking configuration
+    EMBEDDING_MODEL: {{ .Values.config.embedding.model | quote }}
+    CHUNKING_STRATEGY: {{ .Values.config.embedding.chunkingStrategy | quote }}
+    CHUNK_SIZE: {{ .Values.config.embedding.chunk_size | quote }}
+    CHUNK_OVERLAP: {{ .Values.config.embedding.chunk_overlap | quote }}
+
+    # Feature Flags
+    FEATURE_SEMANTIC_CHUNKING: {{ .Values.config.features.semanticChunking | quote }}
+    FEATURE_RERANKING: {{ .Values.config.features.reranking | quote }}
+    FEATURE_RERANK_MULTIPLIER: {{ .Values.config.features.rerankMultiplier | quote }}
+    
+    # Reranking Configuration
+    RERANK_STRATEGY: {{ .Values.config.rerank.strategy | quote }}
+    RERANK_QUALITY_WEIGHT: {{ .Values.config.rerank.qualityWeight | quote }}
+    RERANK_ALPHA: {{ .Values.config.rerank.alpha | quote }}
+    RERANK_LAMBDA: {{ .Values.config.rerank.lambda | quote }}
+    RERANK_MAX_CHUNKS_PER_DOC: {{ .Values.config.rerank.maxChunksPerDoc | quote }}

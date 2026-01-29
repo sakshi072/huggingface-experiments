@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: minio-pvc
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: minio
     component: storage

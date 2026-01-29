@@ -1,9 +1,13 @@
+{{- if .Values.networkPolicy.enabled }}
+---
 # Default deny all ingress traffic
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-ingress
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:
@@ -15,49 +19,51 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-ingress-to-api
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app: retrieval-api
+      {{- include "retrieval-system.api.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
 
   ingress:
-  # Allow traffic from ingress controller
   - from:
     - namespaceSelector:
         matchLabels:
           name: ingress-nginx
     ports:
     - protocol: TCP
-      port: 8001
+      port: {{ .Values.api.service.targetPort }}
 
 ---
-# Allow API to access PostreSQL
+# Allow API to access PostgreSQL
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-api-to-postgres
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app: postgres
+      {{- include "retrieval-system.postgres.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
 
   ingress:
-  # Allow traffic from API pods only
   - from:
     - podSelector:
         matchLabels:
-          app: retrieval-api
+          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
-      port: 5432
+      port: {{ .Values.postgresql.service.port }}
 
 ---
 # Allow API to access MinIO
@@ -65,34 +71,33 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-api-to-minio
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app: minio
+      {{- include "retrieval-system.minio.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
 
   ingress:
-  # Allow API pods to access MinIO API
   - from:
     - podSelector:
         matchLabels:
-          app: retrieval-api
+          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
-      port: 9000
+      port: {{ .Values.minio.service.apiPort }}
 
-  # Allow Ingress to access MinIO console
   - from:
     - namespaceSelector:
         matchLabels:
           name: ingress-nginx
-    
     ports:
     - protocol: TCP
-      port: 9001
+      port: {{ .Values.minio.service.consolePort }}
 
 ---
 # Allow API to access Redis
@@ -100,39 +105,42 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-api-to-redis
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
-      app: redis
+      {{- include "retrieval-system.redis.selectorLabels" . | nindent 6 }}
   
   policyTypes:
   - Ingress
 
   ingress:
-  # Allow traffic from API pods only
   - from:
     - podSelector:
         matchLabels:
-          app: retrieval-api
+          {{- include "retrieval-system.api.selectorLabels" . | nindent 10 }}
     ports:
     - protocol: TCP
-      port: 6379
+      port: {{ .Values.redis.service.port }}
 
+{{- if .Values.networkPolicy.allowDNS }}
 ---
-# Allow DNS queries (required for all pods)
+# Allow DNS queries
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: allow-dns
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
 spec:
   podSelector: {}
   policyTypes:
   - Egress
   
   egress:
-  # Allow DNS queries to kube-dns/CoreDNS
   - to:
     - namespaceSelector:
         matchLabels:
@@ -140,3 +148,5 @@ spec:
     ports:
     - protocol: UDP
       port: 53
+{{- end }}
+{{- end }}

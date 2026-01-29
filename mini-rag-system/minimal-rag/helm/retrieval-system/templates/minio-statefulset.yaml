@@ -1,0 +1,110 @@
+{{- if .Values.minio.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: minio
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.minio.labels" . | nindent 4 }}
+
+spec:
+  serviceName: minio-headless
+  replicas: 1
+
+  selector:
+    matchLabels:
+      {{- include "retrieval-system.minio.selectorLabels" . | nindent 6 }}
+  
+  template:
+    metadata:
+      labels:
+        {{- include "retrieval-system.minio.labels" . | nindent 8 }}
+    
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: minio
+        image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+        imagePullPolicy: {{ .Values.minio.image.pullPolicy }}
+
+        args:
+        - server
+        - /data
+        - --console-address
+        - ":{{ .Values.minio.service.consolePort }}"
+
+        ports:
+        - containerPort: {{ .Values.minio.service.apiPort }}
+          name: api
+          protocol: TCP
+        - containerPort: {{ .Values.minio.service.consolePort }}
+          name: console
+          protocol: TCP
+      
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: MINIO_ROOT_USER
+        
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: retrieval-secrets
+              key: MINIO_ROOT_PASSWORD
+        
+        volumeMounts:
+        - name: minio-storage
+          mountPath: /data
+        
+        {{- with .Values.minio.resources }}
+        resources:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: {{ .Values.minio.service.apiPort }}
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /minio/health/ready
+            port: {{ .Values.minio.service.apiPort }}
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+  
+  {{- if .Values.minio.persistence.enabled }}
+  volumeClaimTemplates:
+  - metadata:
+      name: minio-storage
+      labels:
+        {{- include "retrieval-system.minio.labels" . | nindent 8 }}
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      {{- if .Values.minio.persistence.storageClass }}
+      storageClassName: {{ .Values.minio.persistence.storageClass }}
+      {{- end }}
+      resources:
+        requests:
+          storage: {{ .Values.minio.persistence.size }}
+  {{- else }}
+  volumes:
+  - name: minio-storage
+    emptyDir: {}
+  {{- end }}
+{{- end }}

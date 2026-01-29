@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: retrieval-api
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: retrieval-api
     component: backend

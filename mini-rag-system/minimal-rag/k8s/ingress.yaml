@@ -2,9 +2,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata: 
   name: retrieval-ingress
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
-    app: retrieval-system
+    app: retrieval-system-yaml
   annotations:
     # Ingress class (nginx, traefik, etc.)
     kubernetes.io/ingress.class: "nginx"

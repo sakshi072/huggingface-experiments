@@ -2,7 +2,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: postgres-pvc
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: postgres
     component: database

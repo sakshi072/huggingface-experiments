@@ -1,0 +1,170 @@
+████████████████████████████████████████████████████████████████████████████████
+  ____      _        _                 _   ____            _                 
+ |  _ \ ___| |_ _ __(_) _____   ____ _| | / ___| _   _ ___| |_ ___ _ __ ___  
+ | |_) / _ \ __| '__| |/ _ \ \ / / _` | | \___ \| | | / __| __/ _ \ '_ ` _ \ 
+ |  _ <  __/ |_| |  | |  __/\ V / (_| | |  ___) | |_| \__ \ ||  __/ | | | | |
+ |_| \_\___|\__|_|  |_|\___| \_/ \__,_|_| |____/ \__, |___/\__\___|_| |_| |_|
+                                                  |___/                        
+████████████████████████████████████████████████████████████████████████████████
+
+RAG System Successfully Deployed!
+
+Chart: {{ .Chart.Name }}
+Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+Release: {{ .Release.Name }}
+Namespace: {{ .Values.global.namespace }}
+
+████████████████████████████████████████████████████████████████████████████████
+📋 DEPLOYED COMPONENTS
+████████████████████████████████████████████████████████████████████████████████
+
+✅ API Service:          retrieval-api ({{ .Values.api.replicaCount }} replicas)
+{{- if .Values.postgresql.enabled }}
+✅ PostgreSQL:           postgres-0 (StatefulSet)
+{{- end }}
+{{- if .Values.minio.enabled }}
+✅ MinIO:                minio-0 (StatefulSet)
+{{- end }}
+{{- if .Values.redis.enabled }}
+✅ Redis:                redis (Deployment)
+{{- end }}
+{{- if .Values.autoscaling.enabled }}
+✅ HPA:                  retrieval-api-hpa ({{ .Values.autoscaling.minReplicas }}-{{ .Values.autoscaling.maxReplicas }} replicas)
+{{- end }}
+
+████████████████████████████████████████████████████████████████████████████████
+🌐 ACCESS INFORMATION
+████████████████████████████████████████████████████████████████████████████████
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  {{- if eq .host "retrieval.local" }}
+
+📡 API Endpoint:
+   http://{{ .host }}
+   
+   Available endpoints:
+   - GET  {{ .host }}/health         (Health check)
+   - GET  {{ .host }}/docs           (API documentation)
+   - POST {{ .host }}/documents      (Upload documents)
+   - POST {{ .host }}/search         (Semantic search)
+  {{- end }}
+  {{- if eq .host "minio.local" }}
+
+🗄️  MinIO Console:
+   http://{{ .host }}
+   
+   Credentials:
+   - Username: {{ `{{ .Values.secrets.minio.rootUser }}` }}
+   - Password: {{ `{{ .Values.secrets.minio.rootPassword }}` }}
+  {{- end }}
+{{- end }}
+
+⚠️  Note: Add these hosts to your /etc/hosts file:
+   127.0.0.1 retrieval.local minio.local
+
+{{- else }}
+
+To access the API service:
+
+1. Get the service URL:
+   export POD_NAME=$(kubectl get pods --namespace {{ .Values.global.namespace }} -l "app=retrieval-api" -o jsonpath="{.items[0].metadata.name}")
+   echo "Visit http://127.0.0.1:8001/docs to use your application"
+   kubectl port-forward --namespace {{ .Values.global.namespace }} $POD_NAME 8001:{{ .Values.api.service.port }}
+
+2. Or use port-forward directly:
+   kubectl port-forward --namespace {{ .Values.global.namespace }} svc/retrieval-api {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+
+{{- end }}
+
+████████████████████████████████████████████████████████████████████████████████
+🔧 USEFUL COMMANDS
+████████████████████████████████████████████████████████████████████████████████
+
+# View all resources
+kubectl get all -n {{ .Values.global.namespace }}
+
+# View pod logs
+kubectl logs -n {{ .Values.global.namespace }} -l app=retrieval-api --tail=100 -f
+
+# Check pod status
+kubectl get pods -n {{ .Values.global.namespace }} -w
+
+# Describe API deployment
+kubectl describe deployment retrieval-api -n {{ .Values.global.namespace }}
+
+# Access API pod shell
+kubectl exec -it -n {{ .Values.global.namespace }} deployment/retrieval-api -- /bin/bash
+
+# View ConfigMap
+kubectl get configmap retrieval-config -n {{ .Values.global.namespace }} -o yaml
+
+# View HPA status
+{{- if .Values.autoscaling.enabled }}
+kubectl get hpa retrieval-api-hpa -n {{ .Values.global.namespace }} -w
+{{- end }}
+
+████████████████████████████████████████████████████████████████████████████████
+🔐 SECURITY NOTES
+████████████████████████████████████████████████████████████████████████████████
+
+⚠️  IMPORTANT: The default secrets are placeholders!
+
+Before using in production:
+
+1. Update secrets in values.yaml or use --set flags:
+   helm upgrade {{ .Release.Name }} . \
+     --set secrets.postgresql.password=<strong-password> \
+     --set secrets.minio.rootPassword=<strong-password> \
+     --set secrets.auth0.domain=<your-domain> \
+     --set secrets.auth0.audience=<your-audience>
+
+2. Or use a separate values file for secrets:
+   helm upgrade {{ .Release.Name }} . -f values.yaml -f secrets.yaml
+
+3. Consider using external secrets management:
+   - Sealed Secrets
+   - External Secrets Operator
+   - HashiCorp Vault
+
+████████████████████████████████████████████████████████████████████████████████
+📚 NEXT STEPS
+████████████████████████████████████████████████████████████████████████████████
+
+1. Verify all pods are running:
+   kubectl get pods -n {{ .Values.global.namespace }}
+
+2. Check API health:
+   {{- if .Values.ingress.enabled }}
+   curl http://retrieval.local/health
+   {{- else }}
+   kubectl port-forward -n {{ .Values.global.namespace }} svc/retrieval-api {{ .Values.api.service.port }}:{{ .Values.api.service.port }}
+   curl http://localhost:{{ .Values.api.service.port }}/health
+   {{- end }}
+
+3. Upload your first document:
+   {{- if .Values.ingress.enabled }}
+   curl -X POST http://retrieval.local/documents \
+     -H "Authorization: Bearer <your-token>" \
+     -F "file=@document.pdf"
+   {{- end }}
+
+4. Perform semantic search:
+   {{- if .Values.ingress.enabled }}
+   curl -X POST http://retrieval.local/search \
+     -H "Authorization: Bearer <your-token>" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "your question here", "top_k": 5}'
+   {{- end }}
+
+████████████████████████████████████████████████████████████████████████████████
+📖 DOCUMENTATION
+████████████████████████████████████████████████████████████████████████████████
+
+- GitHub: https://github.com/sakshitayal/mini-rag-system
+- API Docs: http://retrieval.local/docs (when running)
+
+████████████████████████████████████████████████████████████████████████████████
+
+Happy retrieving! 🎉

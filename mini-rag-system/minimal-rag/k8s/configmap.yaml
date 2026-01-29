@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: retrieval-config
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: retrieval-vector-storage
 

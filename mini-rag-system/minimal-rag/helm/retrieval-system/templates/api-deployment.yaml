@@ -1,0 +1,173 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: retrieval-api
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.labels" . | nindent 4 }}
+    version: {{ .Chart.AppVersion }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      {{- include "retrieval-system.api.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "retrieval-system.api.labels" . | nindent 8}}
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+
+    spec:
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+     
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for PostgreSQL..."
+          until nc -z postgres-headless {{ .Values.postgresql.service.port }}; do
+            echo "PostgreSQL is not ready yet - sleeping"
+            sleep 2
+          done
+          echo "PostgreSQL is ready!"
+      
+      - name: wait-for-minio
+        image: busybox:1.35
+        command:
+        - sh
+        - -c
+        - |
+          echo "Waiting for MinIO..."
+          until nc -z minio-headless {{ .Values.minio.service.apiPort }}; do
+            echo "MinIO is not ready yet - sleeping"
+            sleep 2
+          done
+          echo "MinIO is ready!"
+
+      containers:
+        - name: api
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.targetPort }}
+              protocol: TCP
+          
+          envFrom:
+          - configMapRef:
+              name: retrieval-config
+          env:
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: retrieval-secrets
+                key: POSTGRES_PASSWORD
+          
+          - name: MINIO_ROOT_USER
+            valueFrom:
+              secretKeyRef:
+                name: retrieval-secrets
+                key: MINIO_ROOT_USER
+          
+          - name: MINIO_ROOT_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: retrieval-secrets
+                key: MINIO_ROOT_PASSWORD
+          
+          - name: AUTH0_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: retrieval-secrets
+                key: AUTH0_DOMAIN
+
+          - name: AUTH0_AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                name: retrieval-secrets
+                key: AUTH0_AUDIENCE
+
+          {{- with .Values.api.resources }}
+          resources:
+            {{- toYaml . | nindent 10 }}
+          {{- end }}
+          
+          {{- if .Values.api.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.livenessProbe.failureThreshold }}
+          {{- end }}
+
+          {{- if .Values.api.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.readinessProbe.failureThreshold }}
+          {{- end }}
+
+          {{- if .Values.api.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
+          {{- end }}
+
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

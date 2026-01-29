@@ -1,0 +1,19 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "retrieval-system.postgres.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: {{ .Values.postgresql.service.port }}
+      targetPort: {{ .Values.postgresql.service.port }}
+      protocol: TCP
+      name: postgres
+  selector:
+    {{- include "retrieval-system.postgres.selectorLabels" . | nindent 4 }}
+{{- end }}

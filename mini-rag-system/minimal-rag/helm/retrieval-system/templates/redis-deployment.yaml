@@ -1,57 +1,54 @@
+{{- if .Values.redis.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: redis
-  namespace: retrieval-system-yaml
+  namespace: {{ .Values.global.namespace }}
   labels:
-    app: redis
-    component: cache
+    {{- include "retrieval-system.redis.labels" . | nindent 4 }}
+
 spec:
   replicas: 1
 
   selector:
     matchLabels:
-      app: redis
+      {{- include "retrieval-system.redis.selectorLabels" . | nindent 6 }}
   
   template:
     metadata:
       labels:
-        app: redis
-        component: cache
+        {{- include "retrieval-system.redis.labels" . | nindent 8 }}
 
     spec:
       containers:
       - name: redis
-        image: redis:7-alpine
+        image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+        imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
 
         ports:
-        - containerPort: 6379
+        - containerPort: {{ .Values.redis.service.port }}
           name: redis
           protocol: TCP
 
         command:
         - redis-server
         - --maxmemory
-        - "512mb"
+        - {{ .Values.redis.maxmemory | quote }}
         - --maxmemory-policy
-        - "allkeys-lru"
+        - {{ .Values.redis.maxmemoryPolicy | quote }}
         - --save
         - ""
 
+        {{- with .Values.redis.resources }}
         resources:
-          requests:
-            cpu: "100m"
-            memory: "256Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
         
         livenessProbe:
           exec:
             command:
             - redis-cli
             - ping
-            
           initialDelaySeconds: 10
           periodSeconds: 10
           timeoutSeconds: 5
@@ -62,9 +59,8 @@ spec:
             command:
             - redis-cli
             - ping
-          
           initialDelaySeconds: 5
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
-        
+{{- end }}

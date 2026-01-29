@@ -2,7 +2,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: retrieval-api-hpa
-  namespace: retrieval-system
+  namespace: retrieval-system-yaml
   labels:
     app: retrieval-api
 spec:
