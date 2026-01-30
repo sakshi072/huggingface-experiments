@@ -1,0 +1,199 @@
+# Global Settings
+global:
+  environment: development
+  namespace: agent-service
+
+# API service configuration
+api:
+  replicaCount: 1
+  
+  image:
+    repository: sakshitayal712/hf_backend
+    tag: "latest"
+    pullPolicy: Always
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+  
+  # Health check configuration
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 12
+
+# Application Configuration
+config:
+  
+  env: development
+  debug: false
+
+  mongo:
+    mongoDBName: hugg_chat_db
+    mongoMaxPoolSize: 50
+    mongoMinPoolSize: 1
+  
+  model:
+    modelId: meta-llama/Llama-3.2-3B-Instruct
+    apiBaseUrl: https://router.huggingface.co/v1/
+    maxTokens: 1024
+    temperature: 0.7
+
+  ragservice:
+    ragServiceUrl: http://retrieval-api:8001
+
+  ollama:
+    ollamaBaseUrl: http://host.docker.internal:11434
+    ollamaModel: llama3.1:8b
+
+# Secrets Configuration
+secrets:
+  mongo:
+    mongoUri: vfvfdd
+  auth0:
+    domain: dfdfvfd
+    audience: fvfvdf
+  m2m:
+    clientId: fvdvf
+    clientSecret: fvfv
+    audience: fdvf
+  
+  hfToken: vfdvf
+  tavilyApiKey: dvdf
+  langfuseSecretKey: svdcd
+  langfusePublicKey: dcdfv
+  langfuseBaseUrl: acdevddv
+
+# Horizontal Pod Autoscalar
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 3
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 50
+          periodSeconds: 60
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 15
+        - type: Pods
+          value: 4
+          periodSeconds: 15
+  
+  metrics:
+    cpu: 
+      enabled: true
+      targetAverageUtilization: 70
+    
+    memory:
+      enabled: true
+      targetAverageUtilization: 80
+
+# Ingress Configuration
+ingress:
+  enabled: true
+  className: nginx
+
+  annotations:
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, OPTIONS, DELETE"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+  hosts:
+    - host: chat.hug.local
+      paths:
+        - path: /
+          pathType: Prefix
+    
+  tls: []
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  allowDNS: true
+
+  policyTypes:
+    - Ingress
+    - Egress
+
+# Service Account
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Pod Security
+podSecurityContent:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+# Node Selection
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+            - key: app
+              operator: In
+              values:
+              - hugg-backend
+      
+        topologyKey: kubernetes.io/hostname

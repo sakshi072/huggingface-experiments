@@ -1,0 +1,161 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hugg-backend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "agent-service.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  selector:
+    matchLabels:
+      {{- include "agent-service.api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "agent-service.api.labels" . | nindent 8 }}
+        version: {{ .Chart.AppVersion }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secrets.yaml") . | sha256sum }}
+
+    spec:
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: backend
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          image: "{{ .Values.api.image.repository }}:{{ .Values.api.image.tag }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.targetPort }}
+              protocol: TCP
+          
+          envFrom:
+          - configMapRef:
+              name: hugg-backend-config
+          env:
+          - name: MONGO_URI
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: MONGO_URI
+          - name: AUTH0_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: AUTH0_DOMAIN
+          - name: AUTH0_AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: AUTH0_AUDIENCE
+          - name: CLIENT_ID
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: CLIENT_ID
+          - name: CLIENT_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: CLIENT_SECRET
+          - name: AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: AUDIENCE
+          - name: HF_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: HF_TOKEN
+          - name: TAVILY_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: TAVILY_API_KEY
+          - name: LANGFUSE_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: LANGFUSE_SECRET_KEY
+          - name: LANGFUSE_PUBLIC_KEY
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: LANGFUSE_PUBLIC_KEY
+          - name: LANGFUSE_BASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: hugg-backend-secrets
+                key: LANGFUSE_BASE_URL
+          
+          {{- with .Values.api.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.api.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.livenessProbe.failureThreshold }}
+          {{- end }}
+
+          {{- if .Values.api.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.readinessProbe.failureThreshold }}
+          {{- end }}
+
+          {{- if .Values.api.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: /health
+              port: {{ .Values.api.service.targetPort }}
+              scheme: HTTP
+            initialDelaySeconds: {{ .Values.api.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.api.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.api.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
+          {{- end }}
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+      terminationGracePeriodSeconds: 30
+
+
