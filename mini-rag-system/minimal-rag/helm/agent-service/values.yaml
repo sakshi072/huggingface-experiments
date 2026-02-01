@@ -158,13 +158,13 @@ config:
 # Secrets Configuration
 secrets:
   postgresql:
-    password: rag_password
+    password: fnjvfjvnfkjv
   minio:
-    rootUser: minioadmin
-    rootPassword: minioadmin123
+    rootUser: fnjvfjvnfkjv
+    rootPassword: fnjvfjvnfkjv
   auth0:
-    domain: dev-gonhj56z7406v147.us.auth0.com
-    audience: https://api.rag-service.com
+    domain: fnjvfjvnfkjv
+    audience: fnjvfjvnfkjv
 
 # Horizontal Pod Autoscalar
 autoscaling:
