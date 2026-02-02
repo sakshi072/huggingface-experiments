@@ -64,7 +64,7 @@ spec:
         
         {{- with .Values.minio.resources }}
         resources:
-          {{- toYaml . | nindent 10 }}
+          {{- toYaml . | nindent 12 }}
         {{- end }}
         
         livenessProbe:

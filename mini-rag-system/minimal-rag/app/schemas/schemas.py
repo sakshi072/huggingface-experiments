@@ -69,7 +69,7 @@ class SearchResponse(BaseModel):
 
     sources: List[SourceReference] = Field(..., description="Source chunks used")
     query_time: float = Field(..., description="Query processing time in seconds")
-    search_id: str = Field(..., description="Search UUID")
+    search_id: Optional[str] = Field(default=None, description="Search UUID")
 
     class Config:
         json_schema_extra = {

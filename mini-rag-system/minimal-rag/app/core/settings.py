@@ -41,8 +41,10 @@ class DatabaseSettings(BaseSettings):
         )
     
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="POSTGRES_",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class MinIOSettings(BaseSettings):
@@ -55,8 +57,10 @@ class MinIOSettings(BaseSettings):
     secure:bool = Field(default=False)
 
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="MINIO_",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class Auth0Settings(BaseSettings):
@@ -96,8 +100,10 @@ class Auth0Settings(BaseSettings):
         return f"https://{self.domain}/.well-known/jwks.json"
     
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="AUTH0_",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class EmbeddingSettings(BaseSettings):
@@ -136,8 +142,10 @@ class EmbeddingSettings(BaseSettings):
         return v
     
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class ReRankSettings(BaseSettings):
@@ -172,8 +180,10 @@ class ReRankSettings(BaseSettings):
     )
 
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="RERANK_",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class FeatureFlagSettings(BaseSettings):
@@ -198,8 +208,10 @@ class FeatureFlagSettings(BaseSettings):
     )
     
     model_config = SettingsConfigDict(
+        env_file=".env",
         env_prefix="FEATURE_",
-        case_sensitive=False
+        case_sensitive=False,
+        extra="ignore"
     )
 
 class Settings(BaseSettings):
@@ -222,7 +234,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        env_nested_delimiter="__",
+        env_nested_delimiter="_",
         extra="ignore",
         case_sensitive=False
     )

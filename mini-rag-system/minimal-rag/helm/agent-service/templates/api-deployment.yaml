@@ -119,7 +119,7 @@ spec:
 
           {{- with .Values.api.resources }}
           resources:
-            {{- toYaml . | nindent 10 }}
+            {{- toYaml . | nindent 12 }}
           {{- end }}
           
           {{- if .Values.api.livenessProbe.enabled }}

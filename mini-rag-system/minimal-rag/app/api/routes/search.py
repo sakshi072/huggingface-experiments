@@ -68,7 +68,7 @@ async def search_documents(
     if not result.get("sources"):
         return SearchResponse(
             sources=[],
-            query_time=round(query_time, 2)
+            query_time=round(query_time, 2),
         )
 
     # Format sources
