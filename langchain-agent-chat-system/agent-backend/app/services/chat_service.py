@@ -15,16 +15,16 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
 from langfuse.langchain import CallbackHandler
 
-from core.config import (
+from app.core.config import (
    TEMPERATURE
 )
-from models import HistoryMessage
-from infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
-from tools.langchain_rag_tool import search_knowledge_base
-from tools.job_search_tool import get_job_search_tool
-from clients.web_search_client import search_web
-from infrastructure.observability.token_tracker import SimpleTokenTracker
-from infrastructure.observability.request_logger import RequestLogger
+from app.models import HistoryMessage
+from app.infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
+from app.tools.langchain_rag_tool import search_knowledge_base
+from app.tools.job_search_tool import get_job_search_tool
+from app.clients.web_search_client import search_web
+from app.infrastructure.observability.token_tracker import SimpleTokenTracker
+from app.infrastructure.observability.request_logger import RequestLogger
 from langgraph.checkpoint.memory import MemorySaver
 
 load_dotenv()
@@ -99,10 +99,10 @@ async def _generate_response_with_langchain(
     tools = [search_knowledge_base, job_search_tool]
 
     agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are Ollama, an assistant.
+        ("system", """You are Ollama, an assistant. Respond concisely to user query as per below categories.
   - search_knowledge_base: internal documents, company policies, uploaded files
   - search_jobs: job openings, career opportunities
-  - No tool: greetings, general questions, follow-ups on previous results
+  - No tool: greetings, general questions, follow-ups on previous results, eg: Hi, How are you?
   Respond concisely. """),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),

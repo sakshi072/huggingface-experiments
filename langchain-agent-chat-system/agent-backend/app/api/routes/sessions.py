@@ -4,17 +4,17 @@ from typing import Optional
 import uuid
 import logging
 
-from models import (
+from app.models import (
     CreateChatRequest, CreateChatResponse, ChatSessionsResponse,
     UpdateTitleRequest
 )
-from services import (
+from app.services import (
     create_chat_session as create_session,
     get_user_chat_sessions,
     delete_chat_session as delete_session,
     update_chat_title as update_title,
 )
-from api.dependencies import get_current_user_id
+from app.api.dependencies import get_current_user_id
 
 router = APIRouter(prefix="/chat/sessions", tags=["sessions"])
 logger = logging.getLogger("LangChainBackend")

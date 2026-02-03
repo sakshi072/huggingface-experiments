@@ -6,7 +6,7 @@ import httpx
 import logging
 from typing import Optional, List, Dict
 
-from hf_backend.app.core.auth0_token_manager import get_access_token
+from app.infrastructure.auth.token_manager import get_access_token
 
 logger = logging.getLogger(__name__)
 

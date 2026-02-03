@@ -4,20 +4,19 @@ from typing import Optional
 import uuid
 import logging
 
-from models import (
+from app.models import (
     ChatPrompt, InferenceResponse, HistoryResponse,
     GenerateTitleRequest, GenerateTitleResponse
 )
-from services import (
-    generate_response,
-    execute_supervisor_workflow,
+from app.services import (
     get_history,
     clear_history,
     generate_smart_title,
     generate_fallback_title,
 )
-from api.dependencies import get_current_user_id
-from infrastructure.observability.request_logger import log_request
+from app.api.dependencies import get_current_user_id
+from app.infrastructure.observability.request_logger import log_request
+from app.services.chat_service import generate_response
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger("langchain-agent-backend")
@@ -78,12 +77,13 @@ async def chat_prompt(
     log_prefix = f"[RID:{x_request_id[:8]}] [CID:{x_correlation_id[:8]}]"
     logger.info(f"{log_prefix} Received prompt from user {token_user_id[:8]}... chat {chat_id[:8]}...")
 
-    response_text = await execute_supervisor_workflow(
+    response_text = await generate_response(
         user_id=token_user_id,
         chat_id=chat_id,
         prompt=request.prompt,
         request_id=x_request_id,
         correlation_id=x_correlation_id,
+        use_langchain=use_langchain
     )
 
     return InferenceResponse(response=response_text)

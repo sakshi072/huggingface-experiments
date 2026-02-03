@@ -1,9 +1,9 @@
 """Health check and admin endpoints."""
 from fastapi import APIRouter, Depends
 
-from models import HealthCheckResponse
-from infrastructure.database.mongodb import mongo_manager
-from api.dependencies import get_current_user_id
+from app.models import HealthCheckResponse
+from app.infrastructure.database.mongodb import mongo_manager
+from app.api.dependencies import get_current_user_id
 
 router = APIRouter()
 

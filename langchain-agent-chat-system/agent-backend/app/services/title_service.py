@@ -2,7 +2,7 @@
 from starlette.concurrency import run_in_threadpool
 import logging
 
-from core.config import HF_CLIENT, MODEL_ID
+from app.core.config import HF_CLIENT, MODEL_ID
 
 logger = logging.getLogger("LangChainBackend")
 

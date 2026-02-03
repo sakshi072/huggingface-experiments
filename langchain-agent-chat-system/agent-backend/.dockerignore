@@ -1,4 +1,4 @@
-# Day2-hands-on/hf_backend/.dockerignore
+# Langchain-agent-chat-system/agent-backend/.dockerignore
 
 # Python
 __pycache__

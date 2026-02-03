@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import logging
 
-from infrastructure.database.mongodb import mongo_manager
-from api.middleware import setup_cors
-from api.routes import chat_router, sessions_router, health_router
+from app.infrastructure.database.mongodb import mongo_manager
+from app.api.middleware import setup_cors
+from app.api.routes import chat_router, sessions_router, health_router
 
 logger = logging.getLogger("LangChain-Agent")
 

@@ -4,8 +4,8 @@ from starlette.concurrency import run_in_threadpool
 from typing import List, Optional, Tuple
 import logging
 
-from models import HistoryMessage, ChatSessionMetadata
-from infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
+from app.models import HistoryMessage, ChatSessionMetadata
+from app.infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
 
 logger = logging.getLogger("LangChainBackend")
 
