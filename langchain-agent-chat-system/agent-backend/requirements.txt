@@ -1,0 +1,14 @@
+requests
+huggingface_hub
+fastapi
+uvicorn[standard]
+httpx
+openai
+pymongo
+motor
+python-jose[cryptography]
+python-dotenv
+pydantic
+sentence-transformers
+torch
+langfuse

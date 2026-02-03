@@ -1,0 +1,82 @@
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-langchain-backend
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "agent-service.labels" . | nindent 4 }}
+
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agent-service.api.selectorLabels" . | nindent 6 }}
+  
+  policyTypes:
+  - Ingress
+
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: {{ .Values.api.service.targetPort }}
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-langchain-backend-egress
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "agent-service.api.selectorLabels" . | nindent 6 }}
+  
+  policyTypes:
+  - Egress
+
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          {{- include "agent-service.ragapi.selectorLabels" . | nindent 6 }}
+    ports:
+    - protocol: TCP
+      port: 8001
+  
+  # Allow external APIs (MongoDB Atlas, HuggingFace, Auth0, OpenAI)
+  - to:
+    - namespaceSelector: {}
+    ports:
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 27017  # MongoDB
+
+{{- if .Values.networkPolicy.allowDNS }}
+---
+# Allow DNS queries for all pods in retrieval-system namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-retrieval-system
+  namespace: {{ .Values.global.namespace }}
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+{{- end }}
+{{- end }}

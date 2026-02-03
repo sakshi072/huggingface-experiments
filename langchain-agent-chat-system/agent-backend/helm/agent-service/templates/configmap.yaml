@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: langchain-backend-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    {{- include "agent-service.labels" . | nindent 4}}
+data:
+
+  MONGO_DB_NAME: {{ .Values.config.mongo.mongoDBName | quote }}
+  MONGO_MAX_POOL_SIZE: {{ .Values.config.mongo.mongoMaxPoolSize | quote }}
+  MONGO_MIN_POOL_SIZE: {{ .Values.config.mongo.mongoMinPoolSize | quote }}
+
+  # AI Model Configuration
+  MODEL_ID: {{ .Values.config.model.modelId | quote }}
+  API_BASE_URL: {{ .Values.config.model.apiBaseUrl | quote }}
+  MAX_TOKENS: {{ .Values.config.model.maxTokens | quote }}
+  TEMPERATUR: {{ .Values.config.model.temperature | quote }}
+
+  # Retrieval Service COnfig (local service in the same namespace)
+  RAG_SERVICE_URI: {{ .Values.config.ragservice.ragServiceUrl | quote }}
+
+  # Ollama Configuration 
+  OLLAMA_BASE_URL: {{ .Values.config.ollama.ollamaBaseUrl | quote }}
+  OLLAMA_MODEL: {{ .Values.config.ollama.ollamaModel | quote }}
+
+  # Application settings
+  ENV: {{ .Values.config.env | quote }}
+  debug: {{ .Values.config.debug | quote }}
