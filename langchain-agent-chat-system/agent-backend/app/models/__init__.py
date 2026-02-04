@@ -26,6 +26,8 @@ from .api import (
     HealthCheckResponse,
 )
 
+from .mcp import MCPClientConfig
+
 __all__ = [
     # Domain models
     "HistoryMessage",
@@ -47,4 +49,6 @@ __all__ = [
     "GenerateTitleResponse",
     "PaginationParams",
     "HealthCheckResponse",
+    #MCP Client
+    "MCPClientConfig"
 ]

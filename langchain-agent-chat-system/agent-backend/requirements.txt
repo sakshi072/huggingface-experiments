@@ -12,3 +12,4 @@ pydantic
 sentence-transformers
 torch
 langfuse
+fastmcp

@@ -7,6 +7,7 @@ import re
 import os
 import logging
 from datetime import datetime
+import time
 from dotenv import load_dotenv
 
 from langchain_ollama import ChatOllama
@@ -26,11 +27,55 @@ from app.clients.web_search_client import search_web
 from app.infrastructure.observability.token_tracker import SimpleTokenTracker
 from app.infrastructure.observability.request_logger import RequestLogger
 from langgraph.checkpoint.memory import MemorySaver
+from app.clients.mcp_client import get_mcp_tools
 
 load_dotenv()
 
 logger = logging.getLogger("LangChainBackend")
 memory = MemorySaver()
+
+MCP_TOOLS_REFRESH_INTERVAL = int(os.getenv("MCP_TOOLS_REFRESH_INTERVAL", "300"))
+
+# Global cache for MCP tools
+_mcp_tools_cache = None
+_mcp_tools_last_refresh = 0
+
+async def _get_available_tool(log_prefix:str) -> List:
+    """Fetch all available tools including MCP tools"""
+    global _mcp_tools_cache, _mcp_tools_last_refresh
+    local_tools = [get_job_search_tool(web_search_function=search_web)]
+    
+    now = time.time()
+    needs_refresh = (
+        _mcp_tools_cache is None or
+        (now - _mcp_tools_last_refresh) > MCP_TOOLS_REFRESH_INTERVAL
+    )    
+
+    if needs_refresh:
+        try:
+            logger.info(f"{log_prefix} refreshing MCP tools")
+            mcp_tools = await get_mcp_tools()
+
+            _mcp_tools_cache = mcp_tools
+            _mcp_tools_last_refresh = now
+
+            logger.info(
+                f"{log_prefix} ✅ Discovered {len(mcp_tools)} MCP tools: "
+                f"{[t.name for t in mcp_tools]}"
+            )
+        except Exception as e:
+            logger.error(f"{log_prefix} ❌ MCP tool discovery failed: {e}")
+            
+            # Fallback to cached tools
+            if _mcp_tools_cache:
+                logger.warning(f"{log_prefix} Using {len(_mcp_tools_cache)} cached MCP tools")
+            else:
+                logger.warning(f"{log_prefix} No MCP tools available, using local tools only")
+                return local_tools
+    
+    all_tools = local_tools + (_mcp_tools_cache or [])
+    logger.info(f"{log_prefix} Total tools available: {len(all_tools)}")
+    return all_tools
 
 def clean_thinking_tags(text: str) -> str:
     """Remove thinking tags from LLM output"""
@@ -38,7 +83,6 @@ def clean_thinking_tags(text: str) -> str:
         return text
     cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
     return cleaned.strip()
-
 
 def _convert_mongo_to_langchain(mongo_messages: List[HistoryMessage]) -> List:
     """
@@ -59,7 +103,6 @@ def _convert_mongo_to_langchain(mongo_messages: List[HistoryMessage]) -> List:
             langchain_messages.append(AIMessage(content=msg.content))
 
     return langchain_messages
-
 
 async def _generate_response_with_langchain(
     chat_id: str,
@@ -94,16 +137,27 @@ async def _generate_response_with_langchain(
         callbacks=[token_tracker, RequestLogger()]
     )
 
-    job_search_tool = get_job_search_tool(web_search_function=search_web)
+    tools = await _get_available_tool(log_prefix)
 
-    tools = [search_knowledge_base, job_search_tool]
+    tool_descriptions = "\n".join([
+        f"  • {tool.name}: {tool.description}"
+        for tool in tools
+    ])
 
     agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are Ollama, an assistant. Respond concisely to user query as per below categories.
-  - search_knowledge_base: internal documents, company policies, uploaded files
-  - search_jobs: job openings, career opportunities
-  - No tool: greetings, general questions, follow-ups on previous results, eg: Hi, How are you?
-  Respond concisely. """),
+        ("system", f"""You are Ollama, an intelligent assistant with access to multiple tools.
+
+Available Tools:
+{tool_descriptions}
+
+Tool Usage Guidelines:
+- Use search_knowledge_base for internal documents and company policies
+- Use search_jobs for job openings and career opportunities
+- Use search_docs (MCP) for semantic search across knowledge base
+- Use appropriate tools based on user intent
+- No tool needed for greetings or general conversation
+
+Respond concisely and helpfully."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
