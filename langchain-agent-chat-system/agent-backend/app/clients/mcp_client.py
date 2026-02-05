@@ -96,7 +96,7 @@ class MCPClient:
         tool_description = mcp_tool.description or f"Execute {tool_name}"
 
         # Build pydantic model from MCP schema
-        input_schema = self._build_pydantic_model(mcp_tool)
+        # input_schema = self._build_pydantic_model(mcp_tool)
 
         # Create async execution function that uses fastmcp client
         async def execute_tool(**kwargs) -> str:
@@ -109,7 +109,7 @@ class MCPClient:
             description=tool_description,
             func=execute_tool,
             coroutine=execute_tool,
-            args_schema=input_schema
+            args_schema=mcp_tool.inputSchema
         )
 
     def _build_pydantic_model(
@@ -117,12 +117,6 @@ class MCPClient:
         mcp_tool:Any
     ) -> type[BaseModel]:
         """Build pydantic model from mcp tool schema"""
-
-        if not hasattr(mcp_tool, 'inputSchema') or not mcp_tool.inputSchema:
-            return create_model(
-                f"{mcp_tool.name}_input",
-                **{"args": (str, Field(description="Tool arguments"))}
-            )
         
         schema = mcp_tool.inputSchema
 
@@ -182,8 +176,8 @@ class MCPClient:
 
                 async with self._client as client:
                     # FastMCP expects arguments wrapped in "args"
-                    wrapped_args = {"args": arguments}
-                    result = await client.call_tool(tool_name, wrapped_args)
+                    # wrapped_args = {"args": arguments}
+                    result = await client.call_tool(tool_name, arguments)
 
                     if hasattr(result, 'content') and result.content:
                         first_content = result.content[0]
@@ -235,4 +229,4 @@ def get_mcp_client(config: Optional[MCPClientConfig] = None) -> MCPClient:
 async def get_mcp_tools() -> List[StructuredTool]:
     """Convenience function to get all MCP tools"""
     client = get_mcp_client()
-    return client.discover_tools()
+    return await client.discover_tools()

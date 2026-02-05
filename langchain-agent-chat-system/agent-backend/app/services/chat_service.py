@@ -60,11 +60,11 @@ async def _get_available_tool(log_prefix:str) -> List:
             _mcp_tools_last_refresh = now
 
             logger.info(
-                f"{log_prefix} ✅ Discovered {len(mcp_tools)} MCP tools: "
+                f"{log_prefix} Discovered {len(mcp_tools)} MCP tools: "
                 f"{[t.name for t in mcp_tools]}"
             )
         except Exception as e:
-            logger.error(f"{log_prefix} ❌ MCP tool discovery failed: {e}")
+            logger.error(f"{log_prefix} MCP tool discovery failed: {e}")
             
             # Fallback to cached tools
             if _mcp_tools_cache:
@@ -139,25 +139,11 @@ async def _generate_response_with_langchain(
 
     tools = await _get_available_tool(log_prefix)
 
-    tool_descriptions = "\n".join([
-        f"  • {tool.name}: {tool.description}"
-        for tool in tools
-    ])
-
+    # Tool schemas are automatically included by create_openai_tools_agent
+    # Keep system prompt minimal to reduce tokens
     agent_prompt = ChatPromptTemplate.from_messages([
-        ("system", f"""You are Ollama, an intelligent assistant with access to multiple tools.
-
-Available Tools:
-{tool_descriptions}
-
-Tool Usage Guidelines:
-- Use search_knowledge_base for internal documents and company policies
-- Use search_jobs for job openings and career opportunities
-- Use search_docs (MCP) for semantic search across knowledge base
-- Use appropriate tools based on user intent
-- No tool needed for greetings or general conversation
-
-Respond concisely and helpfully."""),
+        ("system", """You are a helpful assistant. Use tools when needed for specific information.
+For greetings or general conversation, respond directly without tools."""),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
         MessagesPlaceholder(variable_name="agent_scratchpad")
