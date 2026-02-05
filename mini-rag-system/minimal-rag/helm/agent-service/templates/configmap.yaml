@@ -28,8 +28,8 @@ data:
     # Embedding and chunking configuration
     EMBEDDING_MODEL: {{ .Values.config.embedding.model | quote }}
     CHUNKING_STRATEGY: {{ .Values.config.embedding.chunkingStrategy | quote }}
-    CHUNK_SIZE: {{ .Values.config.embedding.chunk_size | quote }}
-    CHUNK_OVERLAP: {{ .Values.config.embedding.chunk_overlap | quote }}
+    CHUNK_SIZE: {{ .Values.config.embedding.chunkSize | quote }}
+    CHUNK_OVERLAP: {{ .Values.config.embedding.chunkOverlap | quote }}
 
     # Feature Flags
     FEATURE_SEMANTIC_CHUNKING: {{ .Values.config.features.semanticChunking | quote }}
