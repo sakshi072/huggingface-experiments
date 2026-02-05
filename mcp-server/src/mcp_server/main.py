@@ -6,13 +6,16 @@ import uvicorn
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse
 from starlette.routing import Route, Mount
+from starlette.middleware import Middleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 logger = logging.getLogger(__name__)
 
-# Initialize with metadata
+# Initialize with metadata - allow any host for Kubernetes
 mcp = FastMCP(
     "MCP Server to expose tools like Search and Retrieval service",
-    dependencies=["httpx", "pydantic-settings"]
+    dependencies=["httpx", "pydantic-settings"],
+    host="0.0.0.0",
 )
 
 # Register modularized tools
@@ -29,11 +32,15 @@ async def health(request):
 
 def start():
     """Starts the production web server on the correct port."""
-    # Create main app with health endpoint and mount MCP SSE app
+    # Create main app with health endpoint and mount MCP SSE app at /mcp
+    # Allow all hosts for Kubernetes internal communication
     app = Starlette(
         routes=[
             Route("/health", health),
-            Mount("/", app=mcp.sse_app()),
+            Mount("/mcp", app=mcp.sse_app()),
+        ],
+        middleware=[
+            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
         ]
     )
 
