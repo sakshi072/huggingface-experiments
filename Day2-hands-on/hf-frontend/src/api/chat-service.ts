@@ -1,11 +1,77 @@
 import apiClient from './axios-instance';
 import type { HistoryMessage, InferenceResponse, HistoryResponse } from '../types/chat-types';
+import { TOKEN_STORAGE_KEYS } from '../config/auth0-config';
 
 export const chatService = {
     /**
      * POST /chat/prompt - Sends the user prompt and receives the LLM response.
      * Now requires both user_id and chat_id
      */
+
+    async streamInference(
+        chatId: string,
+        prompt: string,
+        onChunk: (text:string)=> void,
+        onStatusUpdate? : (toolName: string) => void,
+        onDone?: () => void
+    ): Promise<string> {
+        
+        const baseURL = apiClient.defaults.baseURL
+        const token = sessionStorage.getItem(TOKEN_STORAGE_KEYS.ACCESS_TOKEN)
+
+        const response = await fetch(`${baseURL}/chat/prompt`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'chat-id': chatId,
+                ...(token ? {'Authorization': `Bearer ${token}`}: {}),
+            },
+            body: JSON.stringify({prompt})
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+
+        while(true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const text = decoder.decode(value, { stream:true });
+            const lines = text.split('\n\n');
+
+            for (const line of lines){
+                if (!line.startsWith('data: ')) continue;
+                try {
+                    const raw = line.slice(6);
+                    const payload = JSON.parse(raw)
+
+                    switch(payload.type) {
+                        case "status":
+                            onStatusUpdate?.(payload.content);
+                            break;
+                        
+                            case "token":
+                                const text = payload.content;
+                                fullResponse += text
+                                onChunk(text);
+                                onStatusUpdate?.("");
+                                break;
+                            case "error":
+                                console.error("Bakcend Error:", payload.content);
+                                onStatusUpdate?.(`Error: ${payload.content}`)
+                    }    
+                } catch (e) {
+                    console.error("Error parsing SSE JSON:", e, "Line:", line)
+                }
+            }
+        }
+        onDone?.();
+        return fullResponse
+    },
+
     async getInference(chatId: string, prompt: string): Promise<InferenceResponse> {
         const response = await apiClient.post<InferenceResponse>(
             '/chat/prompt',

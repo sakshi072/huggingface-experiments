@@ -22,7 +22,7 @@ export interface HistoryResponse {
 // Client-side representation of a chat message
 export interface ChatMessage extends HistoryMessage {
   // Add a status to handle loading states in the UI
-  status: 'sent' | 'loading' | 'error';
+  status: 'sent' | 'loading' | 'error' | 'Thinking' | 'Loading';
 }
 
 export type ChatSession = string; // session_id is just a string

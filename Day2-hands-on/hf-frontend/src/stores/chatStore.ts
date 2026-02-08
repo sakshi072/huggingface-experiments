@@ -32,7 +32,7 @@ interface ChatState {
   // Actions
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (message: ChatMessage) => void;
-  updateLastMessage: (content: string, status: 'sent' | 'loading' | 'error') => void;
+  updateLastMessage: (content: string, status: 'sent' | 'loading' | 'error' | 'Thinking') => void;
   
   setCurrentChatId: (chatId: string | null) => void;
   setChatSessions: (sessions: ChatSessionMetadata[]) => void;

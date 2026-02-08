@@ -352,22 +352,49 @@ export const useChat = () => {
             status: 'sent' as const,
         };
 
-        const loadingAssistantMessage = {
-            session_id: currentChatId,
-            role: 'assistant' as const,
-            content: 'Thinking...' as const,
-            timestamp: new Date().toISOString(),
-            status: 'loading' as const,
-        };
+        // const loadingAssistantMessage = {
+        //     session_id: currentChatId,
+        //     role: 'assistant' as const,
+        //     content: 'Thinking...' as const,
+        //     timestamp: new Date().toISOString(),
+        //     status: 'loading' as const,
+        // };
 
         addMessage(newUserMessage);
-        addMessage(loadingAssistantMessage)
+        // addMessage(loadingAssistantMessage)
 
         try {
-            const response = await chatService.getInference(currentChatId, prompt);
+            // const response = await chatService.getInference(currentChatId, prompt);
 
-            updateLastMessage(response.response, 'sent');
-            incrementMessagesSent(2);
+            // updateLastMessage(response.response, 'sent');
+            const emptyMessage = {
+                session_id: currentChatId,
+                role: 'assistant' as const,
+                content: 'Thinking...' as const,
+                timestamp: new Date().toISOString(),
+                status: 'loading' as const,
+            }
+            addMessage(emptyMessage)
+
+            let accumulated = '';                                                                                                                                                                                                                                                                                                                                                   
+            const fullResponse = await chatService.streamInference(                                                                                                                                             
+                currentChatId,                                                                                                                                                                                  
+                prompt,                                                                                                                                                                                         
+                (chunk:string) => {                                                                                                                                                                                    
+                    accumulated += chunk;                                                                                                                                                                       
+                    updateLastMessage(accumulated, 'sent');                                                                                                                                                  
+                },                                                                                                                                                                                              
+                (status:string) => {                                                                                                                                                                                 
+                    if (status) {
+                        updateLastMessage(status, 'Thinking')
+                    }                                                                                                                                                      
+                },                                                                                                                                                                                              
+                () => {                                                                                                                                                                                         
+                    updateLastMessage(accumulated, 'sent');                                                                                                                                                     
+                }                                                                                                                                                                                               
+            );                                                                                                                                                                                                  
+                                                                                                                                                                                                                
+      incrementMessagesSent(2); 
             
             const totalMessages = messagesLoadedFromHistory + messagesSentInSession + 2;
             if (totalMessages > PAGE_SIZE && !hasMore) {
@@ -378,7 +405,7 @@ export const useChat = () => {
             if(shouldAutoTitle){
                 const currentChat = chatSessions.find(s => s.chat_id === currentChatId);
                 if (currentChat && currentChat.title === 'New Chat' && currentChat.message_count===0){
-                    smartTitleService.generateTitle(prompt, response.response)
+                    smartTitleService.generateTitle(prompt, fullResponse)
                         .then(async (titleResult) => {
                             try {
                                 await authChatService.updateChatSession(currentChatId, titleResult.title);
