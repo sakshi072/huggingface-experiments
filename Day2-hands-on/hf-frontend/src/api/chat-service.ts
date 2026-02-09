@@ -19,7 +19,7 @@ export const chatService = {
         const baseURL = apiClient.defaults.baseURL
         const token = sessionStorage.getItem(TOKEN_STORAGE_KEYS.ACCESS_TOKEN)
 
-        const response = await fetch(`${baseURL}/chat/prompt`, {
+        const response = await fetch(`${baseURL}/chat/stream`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -74,7 +74,7 @@ export const chatService = {
 
     async getInference(chatId: string, prompt: string): Promise<InferenceResponse> {
         const response = await apiClient.post<InferenceResponse>(
-            '/chat/prompt',
+            '/chat',
             { prompt },
             {
                 headers: {
