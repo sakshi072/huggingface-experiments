@@ -10,6 +10,8 @@ from .session_service import (
 )
 from .title_service import generate_smart_title, generate_fallback_title
 
+from .chat_service import generate_response_standard, generate_response_stream
+
 __all__ = [
     "create_chat_session",
     "get_user_chat_sessions",
@@ -18,5 +20,7 @@ __all__ = [
     "get_history",
     "clear_history",
     "generate_smart_title",
-    "generate_fallback_title"
+    "generate_fallback_title",
+    "generate_response_standard",
+    "generate_response_stream"
 ]

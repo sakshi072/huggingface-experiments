@@ -213,6 +213,8 @@ async def verify_token(
             status_code=401,
             detail="Could not validate credentials"
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error during token verification: {e}", exc_info=True)
         raise HTTPException(

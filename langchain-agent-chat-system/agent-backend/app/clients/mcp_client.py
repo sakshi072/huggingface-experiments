@@ -1,8 +1,9 @@
 from fastmcp import Client
+from fastmcp.client.messages import MessageHandler
 from langchain_core.tools import StructuredTool
 import logging
 from app.models.mcp import MCPClientConfig
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Callable
 import asyncio
 from pydantic import BaseModel, Field, create_model
 
@@ -30,7 +31,7 @@ class MCPClient:
         logger.info(f"MCP client initialized: {self.config.mcp_server_url}")
 
     
-    async def discover_tools(self) -> List[StructuredTool]:
+    async def discover_tools(self):
         """ Get list of all tools from mcp server and convert them to langchain tools"""
 
         logger.info("Getting list of all available tools from MCP server ")
@@ -57,23 +58,24 @@ class MCPClient:
 
                 logger.info(f"Found {len(mcp_tools)} MCP tools")
 
-                langchain_tools = []
+                # langchain_tools = []
 
-                # Convert each MCP tool to langchain tool
-                for mcp_tool in mcp_tools:
-                    try:
-                        langchain_tool = self._convert_to_langchain_tool(mcp_tool, client)
-                        langchain_tools.append(langchain_tool)
+                # # Convert each MCP tool to langchain tool
+                # for mcp_tool in mcp_tools:
+                #     try:
+                #         langchain_tool = self._convert_to_langchain_tool(mcp_tool, client, on_status)
+                #         langchain_tools.append(langchain_tool)
 
-                        self._tools_cache[mcp_tool.name] = langchain_tool
-                        logger.info(f"Registered: {mcp_tool.name}")
+                #         self._tools_cache[mcp_tool.name] = langchain_tool
+                #         logger.info(f"Registered: {mcp_tool.name}")
                     
-                    except Exception as e:
-                        logger.waring(f"Failed to register {mcp_tool.name}: {e}")
-                        continue
+                #     except Exception as e:
+                #         logger.waring(f"Failed to register {mcp_tool.name}: {e}")
+                #         continue
                 
-                logger.info(f"Discovered {len(langchain_tools)} tools from MCP server")
-                return langchain_tools
+                # logger.info(f"Discovered {len(langchain_tools)} tools from MCP server")
+                # return 
+                return mcp_tools
         except Exception as e:
             logger.error(f"Tool discovery failed: {e}")
 
@@ -86,7 +88,7 @@ class MCPClient:
     def _convert_to_langchain_tool(
         self,
         mcp_tool:Any,
-        client: Client
+        on_status: Optional[Callable[[str], None]] = None
     ) -> StructuredTool:
         """
         Convert mcp tool to Langchain Structured tool
@@ -101,7 +103,7 @@ class MCPClient:
         # Create async execution function that uses fastmcp client
         async def execute_tool(**kwargs) -> str:
             """Execute tool vis FastMCP client"""
-            return await self._call_too_with_client(tool_name, kwargs)
+            return await self._call_tool_with_client(tool_name, on_status, kwargs)
         
         # Create langchain tool
         return StructuredTool(
@@ -112,71 +114,22 @@ class MCPClient:
             args_schema=mcp_tool.inputSchema
         )
 
-    def _build_pydantic_model(
-        self,
-        mcp_tool:Any
-    ) -> type[BaseModel]:
-        """Build pydantic model from mcp tool schema"""
-        
-        schema = mcp_tool.inputSchema
-
-        properties = schema.get('properties', [])
-        required = schema.get('required', [])
-
-        # Build field definitions
-        fields = {}
-        for field_name, field_def in properties.items():
-            field_type = self._map_json_type_to_python(field_def.get('type', 'string'))
-            field_descriptipn = field_def.get('description', '')
-
-            # Check if requried
-            is_required = field_name in required
-
-            if is_required:
-                fields[field_name] = (
-                    field_type,
-                    Field(description=field_descriptipn)
-                )
-            else:
-                fields[field_name] = (
-                    Optional[field_type],
-                    Field(default=None, description=field_descriptipn)
-                )
-        # create dynamic pydantic model
-        model = create_model(
-            f"{mcp_tool.name}_input",
-            **fields
-        )
-
-        return model
-    
-    def _map_json_type_to_python(self, json_type:str) -> type:
-        """Map JSON schema types to Python types"""
-        type_map = {
-            "string":str,
-            "integer":int,
-            "number": float,
-            "boolean": bool,
-            "array": list,
-            "object": dict
-        }
-
-        return type_map.get(json_type, str)
-
-    async def _call_too_with_client(
+    async def _call_tool_with_client(
         self,
         tool_name:str,
-        arguments: Dict[str, Any]
+        arguments: Dict[str, Any],
+        on_status: Optional[Callable[[str], None]] = None
     ) -> str:
         """Call MCP tool using FastMCP Client with retry logic"""
 
         for attempt in range(self.config.max_retires):
             try:
                 logger.debug(f"Calling {tool_name} (attempt {attempt+1})")
-
+                
                 async with self._client as client:
-                    # FastMCP expects arguments wrapped in "args"
-                    # wrapped_args = {"args": arguments}
+                    if on_status:                                                                                                                                                                                   
+                        await on_status(f"Calling {tool_name}...") 
+
                     result = await client.call_tool(tool_name, arguments)
 
                     if hasattr(result, 'content') and result.content:
