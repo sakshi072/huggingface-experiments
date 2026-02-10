@@ -98,12 +98,35 @@ class MCPClient:
         tool_description = mcp_tool.description or f"Execute {tool_name}"
 
         # Build pydantic model from MCP schema
-        # input_schema = self._build_pydantic_model(mcp_tool)
+        input_schema = getattr(mcp_tool, "inputSchema", {})
+        properties = input_schema.get("properties", {})
+        required_fields = input_schema.get("required_fields", [])
+
+        # Create fields for pydantic model
+        fields = {}
+        for name, schema in properties.items():
+            field_type = Any
+            mcp_type = schema.get("type")
+            if mcp_type == "string": field_type = str
+            elif mcp_type == "integer": field_type = int
+            elif mcp_type == "boolean": field_type = bool
+
+            default_value = ... if name in required_fields else None
+            fields[name] = (
+                field_type,
+                Field(
+                    default=default_value,
+                    description=schema.get("description", ""),
+                    examples=schema.get("examples", "")
+                )
+            )
+
+        args_schema = create_model(f"{tool_name}Schema", **fields)
 
         # Create async execution function that uses fastmcp client
         async def execute_tool(**kwargs) -> str:
             """Execute tool vis FastMCP client"""
-            return await self._call_tool_with_client(tool_name, on_status, kwargs)
+            return await self._call_tool_with_client(tool_name, arguments=kwargs, on_status=on_status)
         
         # Create langchain tool
         return StructuredTool(
@@ -111,7 +134,7 @@ class MCPClient:
             description=tool_description,
             func=execute_tool,
             coroutine=execute_tool,
-            args_schema=mcp_tool.inputSchema
+            args_schema=args_schema
         )
 
     async def _call_tool_with_client(
