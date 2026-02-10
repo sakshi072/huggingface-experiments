@@ -2,7 +2,7 @@ import axios, { AxiosError } from 'axios';
 import type {AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import { TOKEN_STORAGE_KEYS } from '../config/auth0-config';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://chat.hug.local';
 
 const apiClient: AxiosInstance = axios.create({
     baseURL: API_BASE_URL,
