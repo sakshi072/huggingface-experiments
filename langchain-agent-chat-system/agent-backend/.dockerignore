@@ -40,3 +40,7 @@ tests/
 # Logs
 *.log
 logs/
+
+# Certs
+.pem
+-key.pem

@@ -132,3 +132,7 @@ docker-compose.override.yml
 # =====================
 *.local
 .turbo
+
+# Certs
+.pem
+-key.pem
