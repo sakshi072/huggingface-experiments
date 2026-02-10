@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
 # --- FastAPI App Setup ---
 app = FastAPI(
     title="Langchain Chat Inference Service",
-    version="2.0",
+    version="2.1.2",
     description="Production-ready chat API with cursor pagination and connection pooling",
     lifespan=lifespan
 )

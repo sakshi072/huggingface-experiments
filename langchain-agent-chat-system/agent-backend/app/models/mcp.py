@@ -15,7 +15,7 @@ class MCPClientConfig(BaseModel):
     def from_env(cls) -> "MCPClientConfig":
         """Load config from environment variables"""
         return cls(
-            mcp_server_url=os.getenv("MCP_SERVER_URL", "http://localhost:8002/mcp/sse"),
+            mcp_server_url=os.getenv("MCP_SERVER_URL", "http://mcp-server:8002/mcp/sse"),
             timeout=float(os.getenv("MCP_TIMEOUT", "30.0")),
             max_retries=int(os.getenv("MCP_MAX_RETRIES", "3"))
         )

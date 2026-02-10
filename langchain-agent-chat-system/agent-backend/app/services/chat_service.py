@@ -212,7 +212,7 @@ For greetings or general conversation, respond directly without tools."""),
         f"{totals['total_tokens']} total"
     )
 
-    return response_text
+    return clean_thinking_tags(response_text)
 
 async def _langchain_with_streaming(
     chat_id: str,
