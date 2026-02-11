@@ -15,10 +15,8 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
-# Install uvicorn explicitly (if not in requirements.txt)
-RUN pip install --no-cache-dir uvicorn[standard]
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn uvicorn[standard]
 
 # Install LangChain with compatible versions
 RUN pip install --no-cache-dir \
@@ -40,7 +38,8 @@ COPY . .
 ENV PATH="/home/user/.local/bin:${PATH}"
 
 # Create non-root user (matches K8s securityContext runAsUser: 1000)
-RUN groupadd -g 1000 appgroup && \
+RUN chmod +x /app/entrypoint.sh && \     
+    groupadd -g 1000 appgroup && \
     useradd -u 1000 -g appgroup -m -s /bin/bash appuser && \
     chown -R appuser:appgroup /app
 
@@ -55,4 +54,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run the application
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/entrypoint.sh"]
