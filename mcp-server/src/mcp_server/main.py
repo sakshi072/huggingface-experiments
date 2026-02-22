@@ -29,23 +29,25 @@ async def health(request):
     """Health check endpoint for Kubernetes probes."""
     return JSONResponse({"status": "healthy"})
 
+app = Starlette(
+    routes=[
+        Route("/health", health),
+        Mount("/mcp", app=mcp.sse_app()),
+    ],
+    middleware=[
+        Middleware(TrustedHostMiddleware, allowed_hosts=["*"])
+    ]
+)
 
 def start():
     """Starts the production web server on the correct port."""
-    # Create main app with health endpoint and mount MCP SSE app at /mcp
-    # Allow all hosts for Kubernetes internal communication
-    app = Starlette(
-        routes=[
-            Route("/health", health),
-            Mount("/mcp", app=mcp.sse_app()),
-        ],
-        middleware=[
-            Middleware(TrustedHostMiddleware, allowed_hosts=["*"]),
-        ]
+    logger.info(f"Starting Local MCP Server with mTLS on port {settings.PORT}")
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=settings.PORT,
+        log_level="info"
     )
-
-    # Force uvicorn to use your configured port (8002)
-    uvicorn.run(app, host="0.0.0.0", port=settings.PORT)
 
 if __name__ == "__main__":
     start()

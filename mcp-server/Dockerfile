@@ -30,6 +30,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl && rm -rf /var/lib/apt/lists/*
+
 # Create non-root user
 RUN groupadd -r mcpuser && useradd -r -g mcpuser mcpuser
 
@@ -39,6 +42,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
 COPY src/ ./src/
+COPY entrypoint.sh ./entrypoint.sh
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -46,7 +50,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/src:${PYTHONPATH}"
 
 # Change ownership
-RUN chown -R mcpuser:mcpuser /app
+RUN chown -R mcpuser:mcpuser /app && chmod +x /app/entrypoint.sh
 
 # Switch to non-root user
 USER mcpuser
@@ -59,4 +63,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import httpx; httpx.get('http://localhost:8002/health', timeout=5)" || exit 1
 
 # Run the application
-CMD ["python", "-m", "mcp_server.main"]
+# CMD ["python", "-m", "mcp_server.main"]
+CMD ["/app/entrypoint.sh"]

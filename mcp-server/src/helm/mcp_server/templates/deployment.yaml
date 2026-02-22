@@ -79,13 +79,25 @@ spec:
               secretKeyRef:
                 name: mcp-server-secrets
                 key: AUTH0_CLIENT_SECRET
+          - name: TLS_CA_CERT
+            value: "/etc/mcp/certs/ca.crt"
+          - name: TLS_SERVER_CERT
+            value: "/etc/mcp/certs/tls.crt"
+          - name: TLS_SERVER_KEY
+            value: "/etc/mcp/certs/tls.key"
+          - name: RETRIEVAL_TLS_CA_CERT
+            value: "/etc/retrieval/client-certs/ca.crt"
+          - name: RETRIEVAL_TLS_CLIENT_CERT
+            value: "/etc/retrieval/client-certs/tls.crt"
+          - name: RETRIEVAL_TLS_CLIENT_KEY
+            value: "/etc/retrieval/client-certs/tls.key"
 
           {{- if .Values.livenessProbe.enabled }}
           livenessProbe:
             httpGet:
               path: /health
               port: {{ .Values.service.targetPort }}
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
@@ -97,7 +109,7 @@ spec:
             httpGet:
               path: /health
               port: {{ .Values.service.targetPort }}
-              scheme: HTTP
+              scheme: HTTPS
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}

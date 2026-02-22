@@ -23,4 +23,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra='ignore')
 
+    RETRIEVAL_TLS_CA_CERT: str = "/etc/retrieval/client-certs/ca.crt"
+    RETRIEVAL_TLS_CLIENT_CERT:str = "/etc/retrieval/client-certs/tls.crt"
+    RETRIEVAL_TLS_CLIENT_KEY: str = "/etc/retrieval/client-certs/tls.key"
+    retrieval_timeout: float = 30.0
+    retrieval_retires: int = 3
+
 settings = Settings()
