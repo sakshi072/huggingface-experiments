@@ -105,7 +105,7 @@ def _build_llm_with_fallback(token_tracker:SimpleTokenTracker) -> RunnableWithFa
     primary_llm = ChatOllama(
         model="qwen3:8b", # Ensure you have run 'ollama pull llama3.1'
         temperature=TEMPERATURE,
-        base_url="http://localhost:9999",
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:9999"),
         callbacks=[token_tracker, RequestLogger()],
         timeout=30,
     )
