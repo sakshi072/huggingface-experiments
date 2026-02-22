@@ -28,24 +28,34 @@ api:
   # Health check configuration
   livenessProbe:
     enabled: true
-    initialDelaySeconds: 60
-    periodSeconds: 10
-    timeoutSeconds: 5
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
     failureThreshold: 3
   
   readinessProbe:
     enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 5
-    timeoutSeconds: 3
-    failureThreshold: 3
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    timeoutSeconds: 10
+    failureThreshold: 5
   
   startupProbe:
     enabled: true
     initialDelaySeconds: 10
     periodSeconds: 10
     timeoutSeconds: 5
-    failureThreshold: 12
+    failureThreshold: 15
+  
+  volumes:
+    - name: mcp-client-tls
+      secret:
+        secretName: mcp-client-certs
+  
+  volumeMounts:
+    - name: mcp-client-tls
+      mountPath: "/etc/mcp/client-certs"
+      readOnly: true
 
 # Application Configuration
 config:
@@ -74,20 +84,20 @@ config:
 # Secrets Configuration
 secrets:
   mongo:
-    mongoUri: mongoUri
+    mongoUri: mongouri
   auth0:
     domain: domain
     audience: audience
   m2m:
-    clientId: clientId
-    clientSecret: clientSecret
+    clientId: clientid
+    clientSecret: clientsecret
     audience: audience
   
-  hfToken: hfToken
-  tavilyApiKey: tavilyApiKey
-  langfuseSecretKey: langfuseSecretKey
-  langfusePublicKey: langfusePublicKey
-  langfuseBaseUrl: langfuseBaseUrl
+  hfToken: token
+  tavilyApiKey: apikey
+  langfuseSecretKey: secretkey
+  langfusePublicKey: publickey
+  langfuseBaseUrl: baseurl
 
 # Horizontal Pod Autoscalar
 autoscaling:
@@ -131,9 +141,10 @@ ingress:
   className: nginx
 
   annotations:
-    nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "*"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, OPTIONS, DELETE"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization,chat-id"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
@@ -141,6 +152,10 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
     nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"  # Required for SSE streaming
+    nginx.ingress.kubernetes.io/upstream-keepalive-connection: "100"
+    nginx.ingress.kubernetes.io/upstream-keepalive-requests: "1000"
+    nginx.ingress.kubernetes.io/proxy-https-version: "1.1"
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
 
   hosts:
@@ -148,8 +163,16 @@ ingress:
       paths:
         - path: /
           pathType: Prefix
+    - host: localhost
+      paths: 
+        - path: /
+          pathType: Prefix
     
-  tls: []
+  tls:
+    - secretName: mkcert-tls-secret
+      hosts:
+        - chat.hug.local
+        - localhost
 
 # Network Policy
 networkPolicy:

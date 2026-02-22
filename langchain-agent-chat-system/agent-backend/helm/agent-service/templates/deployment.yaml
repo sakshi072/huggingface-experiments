@@ -113,6 +113,12 @@ spec:
               secretKeyRef:
                 name: langchain-backend-secrets
                 key: LANGFUSE_BASE_URL
+          - name: MCP_TLS_CA_CERT
+            value: "/etc/mcp/client-certs/ca.crt"
+          - name: MCP_TLS_CLIENT_CERT
+            value: "/etc/mcp/client-certs/tls.crt"
+          - name: MCP_TLS_CLIENT_KEY
+            value: "/etc/mcp/client-certs/tls.key"
           
           {{- with .Values.api.resources }}
           resources:
@@ -154,8 +160,19 @@ spec:
             timeoutSeconds: {{ .Values.api.startupProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
           {{- end }}
+
+          {{- with .Values.api.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
       restartPolicy: Always
       dnsPolicy: ClusterFirst
       terminationGracePeriodSeconds: 30
+
+      {{- with .Values.api.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 
 
