@@ -13,3 +13,4 @@ sentence-transformers
 torch
 langfuse
 fastmcp
+langchain_mcp_adapters
