@@ -44,6 +44,7 @@ greenlet = "^3.3.0"
 python-jose = {version = "^3.5.0", extras = ["cryptography"]}
 gunicorn = "^23.0.0"
 redis = "^7.1.0"
+cachetools = "^7.0.1"
 
 [build-system]
 requires = ["poetry-core"]

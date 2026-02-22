@@ -36,15 +36,20 @@ case "$PROCESS_TYPE" in
         echo "Starting Production API..."
         
         WORKERS=4
+        CERT_DIR="/etc/retrieval/server-certs"
 
         exec gunicorn app.main:app \
             --workers $WORKERS \
             --worker-class uvicorn.workers.UvicornWorker \
             --bind 0.0.0.0:8001 \
+            --keyfile $CERT_DIR/tls.key \
+            --certfile $CERT_DIR/tls.crt \
+            --ca-certs $CERT_DIR/ca.crt \
+            --cert-reqs 2 \
             --access-logfile - \
             --error-logfile - \
             --timeout 120 \
-            --keep-alive 5 \
+            --keep-alive 10 \
             --reload
         ;;
     "workers")

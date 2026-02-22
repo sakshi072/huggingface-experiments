@@ -116,6 +116,12 @@ spec:
               secretKeyRef:
                 name: retrieval-secrets
                 key: AUTH0_AUDIENCE
+          - name: MCP_TLS_CA_CERT
+            value: "/etc/retrieval/server-certs/ca.crt"
+          - name: MCP_TLS_CLIENT_CERT
+            value: "/etc/retrieval/server-certs/tls.crt"
+          - name: MCP_TLS_CLIENT_KEY
+            value: "/etc/retrieval/server-certs/tls.key"
 
           {{- with .Values.api.resources }}
           resources:
@@ -124,10 +130,8 @@ spec:
           
           {{- if .Values.api.livenessProbe.enabled }}
           livenessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.api.service.targetPort }}
-              scheme: HTTP
+            tcpSocket:
+              port: {{ .Values.api.service.port }}
             initialDelaySeconds: {{ .Values.api.livenessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.api.livenessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.api.livenessProbe.timeoutSeconds }}
@@ -136,10 +140,8 @@ spec:
 
           {{- if .Values.api.readinessProbe.enabled }}
           readinessProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.api.service.targetPort }}
-              scheme: HTTP
+            tcpSocket:
+              port: {{ .Values.api.service.port }}
             initialDelaySeconds: {{ .Values.api.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.api.readinessProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.api.readinessProbe.timeoutSeconds }}
@@ -148,15 +150,23 @@ spec:
 
           {{- if .Values.api.startupProbe.enabled }}
           startupProbe:
-            httpGet:
-              path: /health
-              port: {{ .Values.api.service.targetPort }}
-              scheme: HTTP
+            tcpSocket:
+              port: {{ .Values.api.service.port }}
             initialDelaySeconds: {{ .Values.api.startupProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.api.startupProbe.periodSeconds }}
             timeoutSeconds: {{ .Values.api.startupProbe.timeoutSeconds }}
             failureThreshold: {{ .Values.api.startupProbe.failureThreshold }}
           {{- end }}
+
+          {{- with .Values.api.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      
+      {{- with .Values.api.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
 
       restartPolicy: Always
       dnsPolicy: ClusterFirst

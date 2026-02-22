@@ -1,15 +1,15 @@
 # Global Settings
 global:
   environment: development
-  namespace: agent-service
+  namespace: agent-system
 
 # API service configuration
 api:
   replicaCount: 1
   
   image:
-    repository: sakshitayal712/mini_rag
-    tag: "mini_rag-e879c9c"
+    repository: repository
+    tag: "latest"
     pullPolicy: Always
 
   service:
@@ -19,8 +19,8 @@ api:
 
   resources:
     requests:
-      cpu: "500m"
-      memory: "1Gi"
+      cpu: "1000m"
+      memory: "2Gi"
     limits:
       cpu: "2000m"
       memory: "4Gi"
@@ -46,6 +46,23 @@ api:
     periodSeconds: 10
     timeoutSeconds: 5
     failureThreshold: 12
+
+  volumes:
+    - name: retrieval-tls-certs
+      secret:
+        secretName: rag-server-certs
+        items:
+        - key: tls.crt
+          path: tls.crt
+        - key: tls.key
+          path: tls.key
+        - key: ca.crt
+          path: ca.crt
+  
+  volumeMounts:
+    - name: retrieval-tls-certs
+      mountPath: "/etc/retrieval/server-certs"
+      readOnly: true
 
 # PostgreSQL Configuration
 postgresql:
@@ -140,31 +157,31 @@ config:
   embedding:
     model: "sentence-transformers/all-MiniLM-L6-v2"
     chunkingStrategy: "recursive_split"
-    chunkSize: "512"
-    chunkOverlap: "50"
+    chunkSize: 512
+    chunkOverlap: 50
   
   rerank:
     strategy: "combined"
-    qualityWeight: "0.2"
-    alpha: "0.7"
-    lambda: "0.5"
-    maxChunksPerDoc: "2"
+    qualityWeight: 0.2
+    alpha: 0.7
+    lambda: 0.5
+    maxChunksPerDoc: 2
   
   features:
     semanticChunking: "false"
     reranking: "false"
-    rerankMultiplier: "3"
+    rerankMultiplier: 3
 
 # Secrets Configuration
 secrets:
   postgresql:
-    password: fnjvfjvnfkjv
+    password: password
   minio:
-    rootUser: fnjvfjvnfkjv
-    rootPassword: fnjvfjvnfkjv
+    rootUser: rootuser
+    rootPassword: rootpassword
   auth0:
-    domain: fnjvfjvnfkjv
-    audience: fnjvfjvnfkjv
+    domain: domain
+    audience: audience
 
 # Horizontal Pod Autoscalar
 autoscaling:

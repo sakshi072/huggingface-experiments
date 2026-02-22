@@ -63,6 +63,22 @@ class MinIOSettings(BaseSettings):
         extra="ignore"
     )
 
+class MCPTLSSettings(BaseSettings):
+    """Langchain Mcp server TLS"""
+
+    tls_ca_cert:str = Field(default="/etc/retrieval/server-certs/ca.crt")
+    tls_client_cert:str = Field(default="/etc/retrieval/server-certs/tls.crt")
+    tls_client_key:str = Field(default="/etc/retrieval/server-certs/tls.key")
+    timeout:float = 30.0
+    retries:int = 3
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="MCP_",
+        case_sensitive=False,
+        extra="ignore"
+    )
+
 class Auth0Settings(BaseSettings):
     """
     Auth0 JWT validation configuration
@@ -230,7 +246,7 @@ class Settings(BaseSettings):
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
     rerank:ReRankSettings = Field(default_factory=ReRankSettings)
     featureflags:FeatureFlagSettings = Field(default_factory=FeatureFlagSettings)
-
+    mcptls: MCPTLSSettings = Field(default_factory=MCPTLSSettings)
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
