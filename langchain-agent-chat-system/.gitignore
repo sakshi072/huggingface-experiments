@@ -134,4 +134,4 @@ docker-compose.override.yml
 .turbo
 
 # Certs
-.pem
+*.pem
