@@ -16,6 +16,7 @@ from app.api.routes import documents, search, health
 from fastapi.security import HTTPBearer
 from app.core.exception_handler import register_exception_handlers
 from app.core.middleware import TracingMiddleware
+from cachetools import TTLCache
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,9 @@ async def lifespan(app: FastAPI):
         logger.info("MinIO Bucket verified on startup.")
 
         # Initialize Vector Storage and Retrieval system
-        vector_storage_retrieval = KnowledgeBase()
+        domain_cache = TTLCache(maxsize=100, ttl=3600)
+        app.state.domain_cache = domain_cache
+        vector_storage_retrieval = KnowledgeBase(domain_cache=domain_cache)
         set_vectore_storage_retrieval(vector_storage_retrieval)
         logger.info("Vector Storage and Retrieval system initialized successfully")
 

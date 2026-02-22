@@ -11,6 +11,7 @@ from app.services.ingestion_service import IngestionService
 from app.services.search_service import SearchService
 from app.utils.reranking_strategy import RerankerConfig, RerankStrategy
 from app.schemas import FileUploadResult
+from cachetools import TTLCache
 from fastapi import UploadFile
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,12 @@ class KnowledgeBase:
     Provides backward-compatible interface for existing API code.
     """
 
-    def __init__(self, reranker_config: Optional[RerankerConfig] = None) -> None:
+    def __init__(self, domain_cache: TTLCache, reranker_config: Optional[RerankerConfig] = None) -> None:
         """Initialize both services."""
         logger.info("Initializing KnowledgeBase...")
 
-        self._ingestion = IngestionService()
-        self._search = SearchService(reranker_config=reranker_config)
+        self._ingestion = IngestionService(domain_cache=domain_cache)
+        self._search = SearchService(domain_cache=domain_cache, reranker_config=reranker_config)
 
         # Initialize database
         db_manager.initialize()
@@ -56,12 +57,26 @@ class KnowledgeBase:
     async def process_files_concurrently(
         self,
         files: List[UploadFile],
-        domain:str
+        domain_name:str
     ) -> List[FileUploadResult]:
-        """Process batch upload"""
+        """
+        Process batch upload with Pre-Flight Domain Resolution.
+        Ensures the domain is locked/created before parallel workers start.
+        """
+
+        logger.info(f"Batch Processing {len(files)} files for domain: {domain_name}")
+
+        try:
+            async with db_manager.session() as session:
+                await self._ingestion.ensure_domain(session, domain_name)
+                await session.commit()
+            logger.info(f"Domain '{domain_name} resolved and cached")
+        except Exception as e:
+            logger.error(f"Failed to resolve domain '{domain_name} during pre-flight: {e}")
+            
         return await self._ingestion.process_files_concurrently(
             files,
-            domain
+            domain_name
         )
     
     async def ingest_file(
@@ -92,21 +107,21 @@ class KnowledgeBase:
     async def search(
         self,
         query_text: str,
-        domain_name: Optional[str] = None,
         top_k: int = 5,
+        domain_name: Optional[str] = None,
         rerank_strategy: RerankStrategy = RerankStrategy.COMBINED,
     ) -> Dict:
         """Search with vector similarity and optional reranking."""
         return await self._search.search(
             query_text=query_text,
-            domain_name=domain_name,
             top_k=top_k,
+            domain_name=domain_name,
             rerank_strategy=rerank_strategy,
         )
     
-    async def search_history(self, limit: int = 100, offset: int = 0) -> List[Dict]:
+    async def search_history(self, limit: int = 100, offset: int = 0, domain:str="general") -> List[Dict]:
         """List of query search result"""
-        return await self._search.get_search_history(limit, offset)
+        return await self._search.get_search_history(limit, offset, domain)
     
     async def get_search_history_by_id(self, search_id:UUID) -> List[Dict]:
         """Query search result"""

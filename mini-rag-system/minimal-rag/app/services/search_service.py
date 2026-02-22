@@ -13,7 +13,7 @@ from uuid import UUID
 
 import numpy as np
 from sqlalchemy import select, func
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.feature_flags import feature_flags
 from app.db import DocumentChunk, Domain, db_manager, SearchAnalytics
 from app.utils.embeddings import get_shared_embedder, embed_chunks
@@ -27,16 +27,19 @@ from app.utils.timer import SearchTimer
 from app.utils.redis_cache_helper import SearchCache
 from app.schemas import SearchResult
 from app.core.settings import settings
-
+from cachetools import TTLCache
 logger = logging.getLogger(__name__)
 
 
 class SearchService:
     """Service for search and document retrieval operations."""
 
-    def __init__(self, reranker_config: Optional[RerankerConfig] = None) -> None:
+    def __init__(self, domain_cache:Optional[TTLCache] = None, reranker_config: Optional[RerankerConfig] = None) -> None:
         """Initialize the search service."""
         logger.info("Initializing SearchService...")
+
+        # Store the domain cache reference
+        self.domain_cache = domain_cache
 
         # Load config
         self.embedding_model = settings.embedding.model
@@ -61,12 +64,12 @@ class SearchService:
     # =========================================================================
     # Search
     # =========================================================================
-
+    
     async def search(
         self,
         query_text: str,
-        domain_name: Optional[str] = None,
         top_k: int = 5,
+        domain_name: Optional[str] = None,
         rerank_strategy: RerankStrategy = RerankStrategy.COMBINED,
     ) -> Dict:
         """
@@ -85,15 +88,23 @@ class SearchService:
         start_time = time.time()
         logger.info(f"Search: {query_text[:50]}...")
         
-        if domain_name:
-            logger.info(f"  Domain: {domain_name}")
-
         async with db_manager.session() as session:
-            # Get domain config
-            domain_id = await self._resolve_domain(
-                session, domain_name
-            )
-            timer.mark("domain_lookup")
+            
+            domain_id = None
+
+            # Get domain config if domain name
+            if domain_name:
+                logger.info(f"  Domain: {domain_name}")
+
+                domain_id = await self._resolve_domain(
+                    session, domain_name
+                )
+                timer.mark("domain_lookup")
+
+                # If domain name was provided but doesn't exist, return empty
+                if not domain_id:
+                    logger.warning(f"History requested for unknown domain: {domain_name}")
+                    return {}
 
             # Generate query embedding
             logger.info("  1/3 Generating query embedding...")
@@ -204,15 +215,22 @@ class SearchService:
         """Resolve domain name to ID and get threshold."""
         if not domain_name:
             return None
-
+        
+        if self.domain_cache is not None and domain_name in self.domain_cache:
+            logger.info("returning domain id from cache")
+            return self.domain_cache[domain_name]
+        
         result = await session.execute(
-            select(Domain).where(Domain.name == domain_name)
+            select(Domain.id).where(Domain.name == domain_name)
         )
-        domain = result.scalar_one_or_none()
+        domain_id = result.scalar_one_or_none()
 
-        if domain:
-            return domain.id
-        return None
+        if domain_id and self.domain_cache is not None:
+            logger.info(f"Added domain_id to domain cache: {domain_id}")
+            self.domain_cache[domain_name] = domain_id
+        
+        logger.info(f"Domain id found - {domain_id}")
+        return domain_id
 
     async def _vector_search(
         self,
@@ -261,7 +279,7 @@ class SearchService:
         ]
 
 
-    async def get_search_history(self, limit:int = 10, offset:int = 0) -> List[Dict]:
+    async def get_search_history(self, limit:int = 10, offset:int = 0, domain:str = "general") -> List[Dict]:
         """List of query search results"""
         async with db_manager.session() as session:
 

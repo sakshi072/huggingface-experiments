@@ -3,7 +3,7 @@ Search and query endpoints
 """
 import time
 import logging
-
+from typing import Optional
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_vectore_storage_retrieval
@@ -59,7 +59,8 @@ async def search_documents(
 
     result = await vectore_storage_retrieval.search(
         query_text=request.query,
-        top_k=request.top_k
+        top_k=request.top_k,
+        domain_name=request.domain_name
     )
 
     query_time = time.time() - start_time

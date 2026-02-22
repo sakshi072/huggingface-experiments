@@ -29,11 +29,14 @@ class SearchRequest(BaseModel):
         description="Number of chunks to retrieve"
     )
 
+    domain_name: Optional[str] = Field(None, description="Document domain to search")
+
     class Config:
         json_schema_extra = {
             "example": {
                 "query": "What is machine learning?",
-                "top_k": 3
+                "top_k": 3,
+                "domain": "general"
             }
         }
 
@@ -154,11 +157,11 @@ class UploadStatus(str, Enum):
 class FileUploadResult(BaseModel):
     """Response schema for document ingestion."""
 
-    message: Optional[str] = Field(..., description="Status message")
+    message: Optional[str] = Field(None, description="Status message")
     filename: str = Field(..., description="Uploaded filename")
     status: UploadStatus = Field(..., description="Status of uploaded file")
-    document_id: Optional[str] = Field(..., description="Document UUID")
-    chunks_created: Optional[int] = Field(..., description="Number of chunks created")
+    document_id: Optional[str] = Field(None, description="Document UUID")
+    chunks_created: Optional[int] = Field(None, description="Number of chunks created")
     processing_time: float = Field(..., description="Processing time in seconds")
     error_message: Optional[str] = Field(None, description="Error message (if failed)")
     metadata: Optional[dict] = Field(None, description="Document metadata (pages, format, etc.)")

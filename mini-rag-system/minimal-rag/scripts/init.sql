@@ -20,10 +20,12 @@ CREATE TABLE IF NOT EXISTS domains (
 -- Insert default domains
 INSERT INTO domains (name, description, min_similarity_threshold) VALUES
 ('general', 'General knowledge base', 0.5),
-('medical', 'Healthcare and medical documentation', 0.7),
+('medical', 'Medical documentation', 0.7),
 ('legal', 'Legal documents and contracts', 0.75),
 ('technical', 'Technical documentation and code', 0.65),
-('finance', 'Financial reports and analysis', 0.75)
+('finance', 'Financial reports and analysis', 0.75),
+('healthcare', 'Healthcare documentation')
+('system-design', 'System design documentations')
 ON CONFLICT (name) DO NOTHING;
 
 -- Documents table (metadata about uploaded files with domain support)
@@ -88,6 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id) WHERE owne
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_hash ON documents(file_hash);
 CREATE INDEX IF NOT EXISTS idx_documents_filename ON documents(filename);
+CREATE INDEX IF NOT EXISTS idx_domain_name ON domain(name);
 
 CREATE INDEX IF NOT EXISTS idx_chunks_domain ON document_chunks(domain_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON document_chunks(document_id);

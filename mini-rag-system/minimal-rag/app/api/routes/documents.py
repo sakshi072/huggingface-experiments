@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @router.post("", response_model=FileUploadResult)
 async def ingest_document(
     file: UploadFile = File(...),
+    domain: str = "general",
     token: dict = Depends(require_scope("search:knowledge"))
 ):
     """
@@ -52,7 +53,7 @@ async def ingest_document(
         )
     return await vector_storage_retrieval.process_single_file(
         file=file,
-        domain_name="",
+        domain_name=domain,
         file_number=1,
         total_files=1
     )
@@ -85,7 +86,7 @@ async def batch_ingest_document(
         raise ServiceUnavailableException("KnowledgeBase", "Not initialized")
     
     # Validate inputs
-    MAX_FILES = 1
+    MAX_FILES = 20
     if len(files) > MAX_FILES:
         raise InvalidParameterException("total_files", len(files), f"Maximum {MAX_FILES} files allowed per batch")
     
@@ -101,7 +102,7 @@ async def batch_ingest_document(
     # Process files concurrently
     results = await vector_storage_retrieval.process_files_concurrently(
         files=files,
-        domain=domain
+        domain_name=domain
     )
 
     # Calculate statistics
