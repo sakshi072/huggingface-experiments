@@ -10,7 +10,7 @@ replicaCount: 2
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: sakshitayal712/mcp-server
+  repository: repository
   pullPolicy: IfNotPresent
   tag: "latest"
 
@@ -143,7 +143,7 @@ config:
 
   env: development
   debug: false
-  retrieval_base_url: http://retrieval-api:8001
+  retrieval_base_url: https://retrieval-api:8001
 
 # Network Policy
 networkPolicy:
@@ -189,6 +189,12 @@ volumes:
     emptyDir: {}
   - name: cache
     emptyDir: {}
+  - name: mcp-tls-certs
+    secret:
+      secretName: mcp-server-certs
+  - name: retrieval-tls-certs
+    secret:
+      secretName: rag-client-certs
 
 # Additional volumeMounts on the output Deployment definition.
 volumeMounts:
@@ -196,6 +202,12 @@ volumeMounts:
     mountPath: /tmp
   - name: cache
     mountPath: /app/.cache
+  - name: mcp-tls-certs
+    mountPath: "/etc/mcp/certs"
+    readOnly: true
+  - name: retrieval-tls-certs
+    mountPath: "/etc/retrieval/client-certs"
+    readOnly: true
 
 nodeSelector: {}
 
