@@ -1,208 +1,94 @@
-from fastmcp import Client
-from fastmcp.client.messages import MessageHandler
-from langchain_core.tools import StructuredTool
-import logging
-from app.models.mcp import MCPClientConfig
-from typing import Optional, Dict, List, Any, Callable
 import asyncio
-from pydantic import BaseModel, Field, create_model
+import logging
+import time
+from typing import Optional, List, Callable
+from contextlib import AsyncExitStack
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from app.models.mcp import MCPClientConfig
 
 logger = logging.getLogger(__name__)
 
-class MCPClient:
-    """
-    MCP client using fastmcp.client
-    
-    Features - 
-    - Uses FastMCP SDK
-    - Automatic connection management
-    - Built-in retry and error handling
-    - Type-safe tool execution
-    - Connection pooling handled by fastmcp
-    """
 
-    def __init__(self, config: Optional[MCPClientConfig]= None):
-        """Initialize MCP Clinet"""
+class MCPClientSSL:
+    def __init__(self, config: Optional[MCPClientConfig] = None):
         self.config = config or MCPClientConfig.from_env()
+        self._tools_cached: List = []
+        self._last_refresh_time: float = 0
+        self._ttl: int = 300
+        self._lock = asyncio.Lock()
+        logger.info(f"MCP Client initialized for {self.config.mcp_server_url}")
 
-        self._client = Client(self.config.mcp_server_url)
-        self._tools_cache: Dict[str, StructuredTool] = {}
+    def _server_config(self) -> dict:
+        return {
+            "knowledge": {
+                "url": self.config.mcp_server_url,
+                "transport": "sse",
+            }
+        }
 
-        logger.info(f"MCP client initialized: {self.config.mcp_server_url}")
+    async def discover_tools(self) -> List:
+        """Raw tool definitions for ToolRegistry cache — no LangChain conversion"""
+        current_time = time.monotonic()
 
-    
-    async def discover_tools(self):
-        """ Get list of all tools from mcp server and convert them to langchain tools"""
+        if self._tools_cached and (current_time - self._last_refresh_time < self._ttl):
+            logger.info(f"Returning {len(self._tools_cached)} cached tools")
+            return self._tools_cached
 
-        logger.info("Getting list of all available tools from MCP server ")
+        async with self._lock:
+            # Re-check after acquiring lock (another coroutine may have refreshed)
+            if self._tools_cached and (time.monotonic() - self._last_refresh_time < self._ttl):
+                return self._tools_cached
 
-        try:
-            async with self._client as client:
-                tools_response = await client.list_tools()
+            logger.info("Cache expired or empty. Fetching fresh tools...")
+            for attempt in range(self.config.max_retires):
+                try:
+                    client = MultiServerMCPClient(self._server_config())
+                    tools = await client.get_tools()  # no async with
+                    self._tools_cached = tools
+                    self._last_refresh_time = time.monotonic()
+                    logger.info(f"Cache updated with {len(tools)} tools")
+                    return self._tools_cached
+                except Exception as e:
+                    logger.warning(f"Failed to fetch tools (attempt {attempt+1}): {e}")
+                    if attempt < self.config.max_retires - 1:
+                        await asyncio.sleep(2 ** attempt)
+                    elif not self._tools_cached:
+                        raise
 
-                logger.info(f"Raw tools_response: {tools_response}")
-                logger.info(f"tools_response type: {type(tools_response)}")
+        return self._tools_cached
 
-                # Handle both list and object with .tools attribute
-                if isinstance(tools_response, list):
-                    mcp_tools = tools_response
-                elif hasattr(tools_response, 'tools'):
-                    mcp_tools = tools_response.tools
-                else:
-                    logger.info("No tools found from this mcp server")
-                    return []
+    def _wrap_with_status(self, tools: List, on_status: Callable) -> List:
+        """Inject status notifications around tool execution"""
+        for tool in tools:
+            original = tool.coroutine
+            tool_name = tool.name
 
-                if not mcp_tools:
-                    logger.info("No tools found from this mcp server")
-                    return []
+            def make_wrapper(orig, name):
+                async def wrapped(**kwargs):
+                    await on_status(f"Searching knowledge base...")
+                    try:
+                        result = await orig(**kwargs)
+                        await on_status("Finished")
+                        return result
+                    except Exception as e:
+                        await on_status(f"Tool {name} failed")
+                        raise
+                return wrapped
 
-                logger.info(f"Found {len(mcp_tools)} MCP tools")
+            tool.coroutine = make_wrapper(original, tool_name)
+        return tools
 
-                # langchain_tools = []
 
-                # # Convert each MCP tool to langchain tool
-                # for mcp_tool in mcp_tools:
-                #     try:
-                #         langchain_tool = self._convert_to_langchain_tool(mcp_tool, client, on_status)
-                #         langchain_tools.append(langchain_tool)
+# Global instance
+_mcp_client: Optional[MCPClientSSL] = None
 
-                #         self._tools_cache[mcp_tool.name] = langchain_tool
-                #         logger.info(f"Registered: {mcp_tool.name}")
-                    
-                #     except Exception as e:
-                #         logger.waring(f"Failed to register {mcp_tool.name}: {e}")
-                #         continue
-                
-                # logger.info(f"Discovered {len(langchain_tools)} tools from MCP server")
-                # return 
-                return mcp_tools
-        except Exception as e:
-            logger.error(f"Tool discovery failed: {e}")
-
-            if self._tools_cache:
-                logger.warning(f"Using {len(self._tools_cache)} cached tools")
-                return list(self._tools_cache.values())
-            
-            raise
-    
-    def _convert_to_langchain_tool(
-        self,
-        mcp_tool:Any,
-        on_status: Optional[Callable[[str], None]] = None
-    ) -> StructuredTool:
-        """
-        Convert mcp tool to Langchain Structured tool
-        """
-        # Extract tool metadata
-        tool_name = mcp_tool.name
-        tool_description = mcp_tool.description or f"Execute {tool_name}"
-
-        # Build pydantic model from MCP schema
-        input_schema = getattr(mcp_tool, "inputSchema", {})
-        properties = input_schema.get("properties", {})
-        required_fields = input_schema.get("required_fields", [])
-
-        # Create fields for pydantic model
-        fields = {}
-        for name, schema in properties.items():
-            field_type = Any
-            mcp_type = schema.get("type")
-            if mcp_type == "string": field_type = str
-            elif mcp_type == "integer": field_type = int
-            elif mcp_type == "boolean": field_type = bool
-
-            default_value = ... if name in required_fields else None
-            fields[name] = (
-                field_type,
-                Field(
-                    default=default_value,
-                    description=schema.get("description", ""),
-                    examples=schema.get("examples", "")
-                )
-            )
-
-        args_schema = create_model(f"{tool_name}Schema", **fields)
-
-        # Create async execution function that uses fastmcp client
-        async def execute_tool(**kwargs) -> str:
-            """Execute tool vis FastMCP client"""
-            return await self._call_tool_with_client(tool_name, arguments=kwargs, on_status=on_status)
-        
-        # Create langchain tool
-        return StructuredTool(
-            name=tool_name,
-            description=tool_description,
-            func=execute_tool,
-            coroutine=execute_tool,
-            args_schema=args_schema
-        )
-
-    async def _call_tool_with_client(
-        self,
-        tool_name:str,
-        arguments: Dict[str, Any],
-        on_status: Optional[Callable[[str], None]] = None
-    ) -> str:
-        """Call MCP tool using FastMCP Client with retry logic"""
-
-        for attempt in range(self.config.max_retires):
-            try:
-                logger.debug(f"Calling {tool_name} (attempt {attempt+1})")
-                
-                async with self._client as client:
-                    if on_status:                                                                                                                                                                                   
-                        await on_status(f"Calling {tool_name}...") 
-
-                    result = await client.call_tool(tool_name, arguments)
-
-                    if hasattr(result, 'content') and result.content:
-                        first_content = result.content[0]
-
-                        if hasattr(first_content, 'text'):
-                            return first_content.text
-                        elif hasattr(first_content, 'data'):
-                            return first_content.data
-                        
-                    return str(result)
-                
-            except Exception as e:
-                logger.warning(f"Tool call failed (attempt {attempt+1}): {e}")
-
-                if attempt < self.config.max_retires -1:
-                    await asyncio.sleep(2**attempt)
-                    continue
-                else:
-                    error_msg = f"Tool {tool_name} failed after {self.config.max_retires} attempts: {e}"
-                    logger.error(f"{error_msg}")
-                    return f"Error: {error_msg}"
-    
-    async def health_check(self) -> bool:
-        """Check MCP server health"""
-        try:
-            async with self._client as client:
-                response = await client.list_tools()
-                logger.debug(f"MCP health check: healthy, tools: {response}")
-                return True
-
-        except Exception as e:
-            logger.warning(f"MCP health check failed: {e}")
-            return False
-    
-    def get_cached_tools(self) -> List[StructuredTool]:
-        """Return cached tools without server call"""
-        return list(self._tools_cache.values())
-    
-# Global instance (singleton)
-_mcp_client: Optional[MCPClient] = None
-
-def get_mcp_client(config: Optional[MCPClientConfig] = None) -> MCPClient:
-    """return MCP client"""
+def get_mcp_client(config: Optional[MCPClientConfig] = None) -> MCPClientSSL:
     global _mcp_client
-    if _mcp_client is None:
-        _mcp_client = MCPClient(config)
+    if not _mcp_client:
+        _mcp_client = MCPClientSSL(config)
     return _mcp_client
 
-async def get_mcp_tools() -> List[StructuredTool]:
-    """Convenience function to get all MCP tools"""
+async def get_mcp_tools() -> List:
+    """Keep for backwards compatibility / ToolRegistry"""
     client = get_mcp_client()
     return await client.discover_tools()
