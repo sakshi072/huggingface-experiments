@@ -7,6 +7,7 @@ from app.api.middleware import setup_cors
 from app.api.routes import chat_router, sessions_router, health_router
 from starlette.exceptions import HTTPException as StarletteException
 from fastapi.responses import JSONResponse
+from app.clients.mcp_client import get_mcp_tools
 
 logger = logging.getLogger("LangChain-Agent")
 
@@ -26,7 +27,10 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Starting LangChain-Agent Chat Backend...")
     try:
+        # Initialize MongoDB
         mongo_manager.initialize()
+        logger.info("Mongo connected")
+
         logger.info("Application startup complete")
     except Exception as e:
         logger.error(f"Startup failed: {e}")
@@ -45,7 +49,7 @@ async def lifespan(app: FastAPI):
 # --- FastAPI App Setup ---
 app = FastAPI(
     title="Langchain Chat Inference Service",
-    version="2.1.3",
+    version="2.1.5",
     description="Production-ready chat API with cursor pagination and connection pooling",
     lifespan=lifespan
 )
