@@ -8,7 +8,7 @@ from app.api.dependencies import get_current_user_id
 router = APIRouter()
 
 
-@router.get("/health", response_model=HealthCheckResponse)
+@router.api_route("/health", methods=["GET", "HEAD"], response_model=HealthCheckResponse)
 async def health_check():
     """
     Health check endpoint for monitoring
