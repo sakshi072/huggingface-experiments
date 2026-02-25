@@ -49,51 +49,6 @@ def _clean_thinking_tags(text: str) -> str:
     cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
     return cleaned.strip()
 
-def _convert_mongo_to_langchain(mongo_messages: List[HistoryMessage]) -> List:
-    """
-    Convert MongoDB history to LangChain format
-
-    Args:
-        mongo_messages: List of HistoryMessage from MongoDB
-
-    Returns:
-        List of LangChain messages
-    """
-    langchain_messages = []
-
-    for msg in mongo_messages:
-        if msg.role == "user":
-            langchain_messages.append(HumanMessage(content=msg.content))
-        elif msg.role == 'assistant':
-            langchain_messages.append(AIMessage(content=msg.content))
-
-    return langchain_messages
-
-def _make_notification_handler(notification_queue: asyncio.Queue):
-    """
-    Returns an MCP message handler that forwards ctx.info()
-    notifications from the tool into the stream queue.
-    """
-    async def handler(message) -> None:
-        if isinstance(message, Exception):
-            logger.error(f"MCP session error: {message}")
-            return
-        method = getattr(message, 'method', None)
-        if not method:
-            return
-        if "logging/message" in method:
-            params = getattr(message, 'params', {})
-            data = getattr(params, 'data', '')
-            level = getattr(params, 'level', 'info')
-            if data:
-                logger.info(f"MCP notification [{level}]: {data}")
-                await notification_queue.put({
-                    "type": "status",
-                    "content": str(data)
-                })
-
-    return handler
-
 def _build_llm_with_fallback(token_tracker:SimpleTokenTracker) -> RunnableWithFallbacks:
     """
     Primary: local qwen3:8b
@@ -163,30 +118,6 @@ async def _get_cached_tool_schemas(session: ClientSession) -> List:
         _tool_schema_cache_time = asyncio.get_event_loop().time()
         logger.info(f"Tool schema cache upadteL {len(tools)} tools")
         return _tool_schema_cache
-    
-async def get_chat_history(user_id:str, chat_id:str, log_prefix:str):
-    """Get chat history for a user's chat session"""
-    is_owner = await run_in_threadpool(
-        MONGO_CHAT_CLIENT.verify_chat_ownership,
-        chat_id,
-        user_id
-    )
-
-    if not is_owner:
-        logger.error(f"{log_prefix} Unauthorized access attempt - user does not own this chat")
-        raise HTTPException(
-            status_code=403,
-            detail="Unauthorized access to chat session"
-        )
-
-    history_messages, _, _ = await run_in_threadpool(
-        MONGO_CHAT_CLIENT.get_history,
-        chat_id,
-        limit=15,
-        cursor=None
-    )
-    
-    return history_messages
 
 async def persist_history(user_id:str, chat_id:str, prompt:str, log_prefix:str, response_text:str, error: bool):
     """Store user and assistant message into db for context"""
@@ -221,7 +152,7 @@ async def persist_history(user_id:str, chat_id:str, prompt:str, log_prefix:str, 
 async def _langchain_without_streaming(
     chat_id: str,
     prompt: str,
-    mongo_history: List[HistoryMessage],
+    prepared_history,
     log_prefix: str
 ):
     """
@@ -241,7 +172,6 @@ async def _langchain_without_streaming(
 
     token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
     langfuse_handler = CallbackHandler()
-    langchain_history = _convert_mongo_to_langchain(mongo_history)
 
     llm = ChatOllama(
         model="llama3.1:8b", # Ensure you have run 'ollama pull llama3.1'
@@ -286,14 +216,13 @@ For greetings or general conversation, respond directly without tools."""),
     result = await executor.ainvoke(
         {
             "input": prompt,
-            "chat_history": langchain_history,
+            "chat_history": prepared_history,
             "current_date": datetime.now().strftime("%y-%m-%d")
         },
         config={"callbacks": [token_tracker, langfuse_handler]}
     )
 
     response_text = result["output"]
-    logger.info("----------------------")
     logger.info(f"response_text after generation: {response_text}")
     steps = result.get("intermediate_steps", [])
     rag_calls = len([s for s in steps if s[0].tool == "search_knowledge_base"])
@@ -316,31 +245,16 @@ For greetings or general conversation, respond directly without tools."""),
 async def _langchain_with_streaming(chat_id, prompt, prepared_history, log_prefix):
     token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
     langfuse_handler = CallbackHandler()
-    # notification_queue = asyncio.Queue()
     mcp_client = get_mcp_client()
     client = MultiServerMCPClient(mcp_client._server_config())
 
     # Connection opens here, stays alive for full agent execution, closes on exit
     try:
         async with client.session("knowledge") as session:
-            
-            # handler = _make_notification_handler(notification_queue)
-            # if hasattr(session, '_message_handler'):
-            #     session._message_handler = handler
-            #     logger.info("MCP notification handler injected successfully")
-            # else:
-            #     logger.warning("MCP session does not support _message_handler — ctx.info() notifications will not be forwarded to user")
-
             raw_tools = await _get_cached_tool_schemas(session)
             logger.info(f"Tools returned from MCP adapter - {raw_tools}")
             tools = [get_job_search_tool(web_search_function=search_web)] + raw_tools
 
-            # llm = ChatOllama(
-            #     model="qwen3:8b", # Ensure you have run 'ollama pull llama3.1'
-            #     temperature=TEMPERATURE,
-            #     base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            #     callbacks=[token_tracker, RequestLogger()]
-            # )
             llm = _build_llm_with_fallback(token_tracker)
             executor = _build_agent(llm, tools)
             sent_any = False
@@ -351,11 +265,6 @@ async def _langchain_with_streaming(chat_id, prompt, prepared_history, log_prefi
                     version="v2",
                     config={"callbacks": [token_tracker, langfuse_handler]}
                 ):
-                    # while not notification_queue.empty():
-                    #     notification = notification_queue.get_nowait()
-                    #     sent_any = True
-                    #     logger.info(f"NOTIFICATION FROM MCP SERVER: {notification}")
-                    #     yield f"data: {json.dumps(notification)}\n\n"
 
                     kind = event["event"]
                     if kind == "on_chat_model_stream":
@@ -371,9 +280,6 @@ async def _langchain_with_streaming(chat_id, prompt, prepared_history, log_prefi
                         payload = {'type': 'status', 'content': f"Searching knowledge base for '{query}'..." if query else "Searching..."}
                         yield f"data: {json.dumps(payload)}\n\n"
                     elif kind == "on_tool_end":
-                        # while not notification_queue.empty():
-                        #     notification = notification_queue.get_nowait()
-                        #     yield f"data: {json.dumps(notification)}\n\n"
                         payload = {'type': 'status', 'content': 'Finished'}
                         yield f"data: {json.dumps(payload)}\n\n"
                 
@@ -492,14 +398,29 @@ async def generate_response_standard(
     """
 
     log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [UID:{user_id[:8]}] [CHAT:{chat_id[:8]}]"
+    is_owner = await run_in_threadpool(
+        MONGO_CHAT_CLIENT.verify_chat_ownership,
+        chat_id,
+        user_id
+    )
 
-    history_messages = await get_chat_history(user_id, chat_id, log_prefix)
+    if not is_owner:
+        logger.error(f"{log_prefix} Unauthorized access attempt - user does not own this chat")
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized access to chat session"
+        )
+    history_messages = await prepare_chat_history(
+        user_id=None,
+        chat_id=chat_id,
+        log_prefix=log_prefix
+    )
 
     try:
         response_text = await _langchain_without_streaming(
             chat_id=chat_id,
             prompt=prompt,
-            mongo_history=history_messages,
+            prepared_history=history_messages,
             log_prefix=log_prefix
         )
 
