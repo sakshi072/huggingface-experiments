@@ -19,25 +19,22 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from mcp import ClientSession
 from langchain_core.runnables import RunnableWithFallbacks
-
 from app.core.config import (
    TEMPERATURE
 )
 from app.models import HistoryMessage
 from app.infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
-from app.tools.langchain_rag_tool import search_knowledge_base
 from app.tools.job_search_tool import get_job_search_tool
 from app.clients.web_search_client import search_web
 from app.infrastructure.observability.token_tracker import SimpleTokenTracker
 from app.infrastructure.observability.request_logger import RequestLogger
-from langgraph.checkpoint.memory import MemorySaver
+from app.services.chat_history_service import prepare_chat_history
 from app.clients.mcp_client import get_mcp_tools, get_mcp_client
 import asyncio
 
 load_dotenv()
 
 logger = logging.getLogger("LangChainBackend")
-memory = MemorySaver()
 
 # Tool schema cache - avoid list_tools() on every request
 _tool_schema_cache: Optional[List] = None
@@ -105,7 +102,7 @@ def _build_llm_with_fallback(token_tracker:SimpleTokenTracker) -> RunnableWithFa
     primary_llm = ChatOllama(
         model="qwen3:8b", # Ensure you have run 'ollama pull llama3.1'
         temperature=TEMPERATURE,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:9999"),
+        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
         callbacks=[token_tracker, RequestLogger()],
         timeout=30,
     )
@@ -129,6 +126,8 @@ def _build_agent(llm, tools):
         ("system", (
             "You are a helpful assistant. "
             "Use tools when the user asks for specific information from the knowledge base or job listings. "
+            "not the conversation history. "
+            "When calling search_docs, select domain_name based ONLY on the current user question, "
             "For greetings or general conversation, respond directly without tools."
         )),
         MessagesPlaceholder(variable_name="chat_history"),
@@ -145,6 +144,7 @@ def _build_agent(llm, tools):
         early_stopping_method="force",
         return_intermediate_steps=True,
     )
+
 async def _get_cached_tool_schemas(session: ClientSession) -> List:
     """Return cached tool schemas if within TTL else fallback to list tools() if expired or empty"""
     global _tool_schema_cache, _tool_schema_cache_time
@@ -313,10 +313,9 @@ For greetings or general conversation, respond directly without tools."""),
 
     return _clean_thinking_tags(response_text)
 
-async def _langchain_with_streaming(chat_id, prompt, mongo_history, log_prefix):
+async def _langchain_with_streaming(chat_id, prompt, prepared_history, log_prefix):
     token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
     langfuse_handler = CallbackHandler()
-    langchain_history = _convert_mongo_to_langchain(mongo_history)
     # notification_queue = asyncio.Queue()
     mcp_client = get_mcp_client()
     client = MultiServerMCPClient(mcp_client._server_config())
@@ -348,7 +347,7 @@ async def _langchain_with_streaming(chat_id, prompt, mongo_history, log_prefix):
 
             try:
                 async for event in executor.astream_events(
-                    {"input": prompt, "chat_history": langchain_history},
+                    {"input": prompt, "chat_history": prepared_history},
                     version="v2",
                     config={"callbacks": [token_tracker, langfuse_handler]}
                 ):
@@ -412,15 +411,31 @@ async def generate_response_stream(
     """
 
     log_prefix = f"[RID:{request_id[:8]}] [CID:{correlation_id[:8]}] [UID:{user_id[:8]}] [CHAT:{chat_id[:8]}]"
+    is_owner = await run_in_threadpool(
+        MONGO_CHAT_CLIENT.verify_chat_ownership,
+        chat_id,
+        user_id
+    )
 
-    history_messages = await get_chat_history(user_id, chat_id, log_prefix)
+    if not is_owner:
+        logger.error(f"{log_prefix} Unauthorized access attempt - user does not own this chat")
+        raise HTTPException(
+            status_code=403,
+            detail="Unauthorized access to chat session"
+        )
+    prepared_messages = await prepare_chat_history(
+        user_id=None,
+        chat_id=chat_id,
+        log_prefix=log_prefix
+    )
+    history_messages = prepared_messages.langchain_messages
     full_response_content = []
     had_error = False
     try:
         async for chunk in _langchain_with_streaming(
             chat_id=chat_id,
             prompt=prompt,
-            mongo_history=history_messages,
+            prepared_history=history_messages,
             log_prefix=log_prefix
         ):
             yield chunk
