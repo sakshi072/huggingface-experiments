@@ -15,19 +15,21 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir gunicorn uvicorn[standard]
+    pip install --no-cache-dir -r requirements.txt
+# RUN pip install --no-cache-dir --upgrade pip && \
+#     pip install --no-cache-dir -r requirements.txt && \
+#     pip install --no-cache-dir gunicorn uvicorn[standard]
 
 # Install LangChain with compatible versions
-RUN pip install --no-cache-dir \
-    langchain \
-    langchain-openai \
-    langchain-community \
-    langchain-core \
-    langchain-text-splitters \
-    langchain-classic \
-    langfuse \
-    langchain-ollama
+# RUN pip install --no-cache-dir \
+#     langchain \
+#     langchain-openai \
+#     langchain-community \
+#     langchain-core \
+#     langchain-text-splitters \
+#     langchain-classic \
+#     langfuse \
+#     langchain-ollama
 
 # Verify critical packages are installed
 RUN python -c "import fastapi; import uvicorn; import pymongo; import openai; print('✅ All packages installed')"
