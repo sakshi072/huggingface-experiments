@@ -15,7 +15,11 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
 API_BASE_URL = "https://router.huggingface.co/v1/"
 MAX_TOKENS = 1024
-TEMPERATURE = 0.7
+TEMPERATURE = 0.1
+POSTGRES_URI = os.getenv(
+    "POSTGRES_URI",
+    ""
+)
 
 # --- System Message ---
 SYSTEM_MESSAGE_INFERENCE: Dict[str, str] = {

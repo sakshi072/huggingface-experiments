@@ -8,6 +8,7 @@ from app.api.routes import chat_router, sessions_router, health_router
 from starlette.exceptions import HTTPException as StarletteException
 from fastapi.responses import JSONResponse
 from app.clients.mcp_client import get_mcp_tools
+from app.infrastructure.memory.postgres_checkpointer import init_checkpointer, close_checkpointer
 
 logger = logging.getLogger("LangChain-Agent")
 
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI):
         mongo_manager.initialize()
         logger.info("Mongo connected")
 
+        await init_checkpointer()
+        logger.info("Checkpointer initialized")
+
         logger.info("Application startup complete")
     except Exception as e:
         logger.error(f"Startup failed: {e}")
@@ -40,6 +44,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Shutting down LangChain-Agent Chat Backend...")
     try:
+        await close_checkpointer()
         mongo_manager.close()
         logger.info("Graceful shutdown complete")
     except Exception as e:

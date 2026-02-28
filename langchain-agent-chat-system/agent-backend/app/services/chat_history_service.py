@@ -117,14 +117,14 @@ async def prepare_chat_history(
     if len(raw_messages) <= 6:
         # Short history - user verbatim
         messages = _convert_mongo_to_langchain(raw_messages)
-        token_estimate = sum(len(m.content.split() * 1.3 for m in raw_messages))
+        token_estimate = sum(len(m.content.split()) * 1.3 for m in raw_messages)
         return PreparedHistory(messages, len(messages), False, int(token_estimate))
     
     elif len(raw_messages) <= 14:
         # Medium history - sliding window, keep last 6
         recent = messages[-6:]
         messages = _convert_mongo_to_langchain(recent)
-        token_estimate = sum(len(m.content.split() * 1.3 for m in raw_messages))
+        token_estimate = sum(len(m.content.split()) * 1.3 for m in raw_messages)
         return PreparedHistory(messages, len(messages), False, int(token_estimate))
     
     else:
