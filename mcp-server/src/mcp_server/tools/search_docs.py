@@ -76,8 +76,6 @@ async def search_knowledge_base(
     """Semantic search across all documents available."""
     token = await get_token()
     ssl_context = _get_ssl_context()
-    await ctx.info(f"CTX.INFO: Searching for {query}")
-    logger.info(f"Sent ctx.info notification for query: {query}")
 
     target_url = f"{settings.RETRIEVAL_BASE_URL}/search"
     logger.info(f"🚀 RAG Request: {target_url}")
