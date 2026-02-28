@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: langraph-postgres-init
+  namespace: {{ .Values.global.namespace }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+          - sh
+          - -c
+          - |
+            until nc -z postgres-headless.{{ .Values.global.namespace }}.svc.cluster.local 5432; do
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+            echo "PostgreSQL ready"
+      containers:
+        - name: postgres-init
+          image: postgres:16
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langchain-backend-secrets
+                  key: POSTGRES_ADMIN_PASSWORD
+            - name: LANGRAPH_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: langchain-backend-secrets
+                  key: POSTGRES_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+                echo "Creating LangGraph database and user..."
+                
+                psql -h postgres-headless.{{ .Values.global.namespace }}.svc.cluster.local \
+                    -U postgres \
+                    -d postgres \
+                    <<-EOSQL
+                -- Idempotent — safe to run multiple times
+                DO \$\$
+                BEGIN
+                    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{{ .Values.langraph.database.user }}') THEN
+                    CREATE USER {{ .Values.langraph.database.user }} WITH PASSWORD '$(LANGRAPH_DB_PASSWORD)';
+                    RAISE NOTICE 'User {{ .Values.langraph.database.user }} created';
+                    ELSE
+                    RAISE NOTICE 'User {{ .Values.langraph.database.user }} already exists';
+                    END IF;
+                END
+                \$\$;
+
+                -- Create database if not exists
+                SELECT 'CREATE DATABASE {{ .Values.langraph.database.name }} OWNER {{ .Values.langraph.database.user }}'
+                WHERE NOT EXISTS (
+                    SELECT FROM pg_database WHERE datname = '{{ .Values.langraph.database.name }}'
+                )\gexec
+
+                -- Grant privileges
+                GRANT ALL PRIVILEGES ON DATABASE {{ .Values.langraph.database.name }} 
+                    TO {{ .Values.langraph.database.user }};
+                EOSQL
+
+                # Connect to the new database and grant schema permissions
+                psql -h postgres-headless.{{ .Values.global.namespace }}.svc.cluster.local \
+                    -U postgres \
+                    -d {{ .Values.langraph.database.name }} \
+                    <<-EOSQL
+                GRANT ALL ON SCHEMA public TO {{ .Values.langraph.database.user }};
+                ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+                    GRANT ALL ON TABLES TO {{ .Values.langraph.database.user }};
+                ALTER DEFAULT PRIVILEGES IN SCHEMA public 
+                    GRANT ALL ON SEQUENCES TO {{ .Values.langraph.database.user }};
+                EOSQL
+
+                echo "LangGraph database initialized successfully"
