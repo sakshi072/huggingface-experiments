@@ -39,6 +39,19 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
 
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.35
+          command:
+          - sh
+          - -c
+          - |
+            until nc -z postgres-headless.{{ .Values.global.namespace }}.svc.cluster.local 5432; do
+              echo "Waiting for PostgreSQL..."
+              sleep 2
+            done
+            echo "PostgreSQL ready"
+
       containers:
         - name: backend
           {{- with .Values.securityContext }}
@@ -113,6 +126,16 @@ spec:
               secretKeyRef:
                 name: langchain-backend-secrets
                 key: LANGFUSE_BASE_URL
+          - name: POSTGRES_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: langchain-backend-secrets
+                key: POSTGRES_PASSWORD
+          - name: POSTGRES_URI
+            valueFrom:
+              secretKeyRef:
+                name: langchain-backend-secrets
+                key: POSTGRES_URI
           - name: MCP_TLS_CA_CERT
             value: "/etc/mcp/client-certs/ca.crt"
           - name: MCP_TLS_CLIENT_CERT
