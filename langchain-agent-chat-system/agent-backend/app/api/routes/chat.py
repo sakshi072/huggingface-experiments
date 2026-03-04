@@ -105,7 +105,6 @@ async def chat_standard(
     chat_id: Optional[str] = Header(None, alias="chat-id"),
     x_request_id: Optional[str] = Header(None, alias="X-Request-ID"),
     x_correlation_id: Optional[str] = Header(None, alias="X-Correlation-ID"),
-    use_langchain: bool = True
 ):
     """Receives the user prompt and returns the LLM response."""
     log_request(f"ENDPOINT HIT: {request.prompt[:50]}")
