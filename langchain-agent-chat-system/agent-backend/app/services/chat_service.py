@@ -1,29 +1,24 @@
 """Chat service - handles message generation and response logic."""
 from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 import json
 import re
-import os
 import logging
 from datetime import datetime
-import time
-from dotenv import load_dotenv
 
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.agents import AgentExecutor, create_openai_tools_agent
 from langchain.agents import create_agent
-from langgraph.checkpoint.memory import MemorySaver
+from langchain.agents.middleware import wrap_model_call, ModelRequest, ModelResponse
 from langchain_core.messages import HumanMessage
 from langfuse.langchain import CallbackHandler
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import convert_mcp_tool_to_langchain_tool
 from mcp import ClientSession
 from langchain_core.runnables import RunnableWithFallbacks
-from app.core.config import (
-   TEMPERATURE
-)
+from langchain_core.messages import trim_messages
 from app.models import HistoryMessage
 from app.infrastructure.database.repository.chat_repository import MONGO_CHAT_CLIENT
 from app.tools.job_search_tool import get_job_search_tool
@@ -33,12 +28,10 @@ from app.infrastructure.observability.request_logger import RequestLogger
 from app.infrastructure.memory.postgres_checkpointer import get_checkpointer
 from app.services.chat_history_service import prepare_chat_history
 from app.clients.mcp_client import get_mcp_tools, get_mcp_client
+from app.core.settings import settings
 import asyncio
 
-load_dotenv()
-
 logger = logging.getLogger("LangChainBackend")
-_memory = MemorySaver()
 
 # Tool schema cache - avoid list_tools() on every request
 _raw_tool_definition_cache: Optional[List] = None
@@ -59,17 +52,17 @@ def _build_llm_with_fallback(token_tracker:SimpleTokenTracker) -> RunnableWithFa
     Fallback: faster smaller model
     """
     primary_llm = ChatOllama(
-        model="qwen3:8b", # Ensure you have run 'ollama pull llama3.1'
-        temperature=TEMPERATURE,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        model=settings.OLLAMA_PRIMARY_MODEL, # Ensure you have run 'ollama pull llama3.1'
+        temperature=settings.OLLAMA_TEMPERATURE,
+        base_url=settings.OLLAMA_BASE_URL,
         callbacks=[token_tracker, RequestLogger()],
         timeout=30,
     )
 
     fallback_llm = ChatOllama(
-        model="llama3.1:8b", # Ensure you have run 'ollama pull llama3.1'
-        temperature=TEMPERATURE,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        model=settings.OLLAMA_FALLBACK_MODEL, # Ensure you have run 'ollama pull llama3.1'
+        temperature=settings.OLLAMA_TEMPERATURE,
+        base_url=settings.OLLAMA_BASE_URL,
         callbacks=[token_tracker, RequestLogger()],
         timeout=20, 
     )
@@ -78,7 +71,29 @@ def _build_llm_with_fallback(token_tracker:SimpleTokenTracker) -> RunnableWithFa
         [fallback_llm],
         exceptions_to_handle=(Exception,)
     )
+
+@wrap_model_call
+async def trim_context(
+    request:ModelRequest,
+    handler:Callable[[ModelRequest], ModelResponse]
+) -> ModelResponse:
+    """Trim messages before LLM call without touching Postgres checkpoint."""
+    logger.info(f"Messages count before trim: {len(request.messages)}")
+
+    trimmed = trim_messages(
+            request.messages,
+            max_tokens=8,
+            strategy="last",
+            token_counter=len,
+            start_on="human",
+            include_system=True,
+            allow_partial=False,
+        )
     
+    logger.info(f"Messages count after trim: {len(trimmed)}")
+    
+    request = request.override(messages=trimmed)
+    return await handler(request)
 def _build_agent(llm, tools):
     """Build agent and executor - separated for clarity"""
     checkpointer = get_checkpointer()
@@ -86,6 +101,8 @@ def _build_agent(llm, tools):
         model=llm,
         tools=tools,
         checkpointer=checkpointer,
+        middleware=[trim_context],
+        debug=True,
         system_prompt=(
             "You are a helpful assistant. "
             "Use tools when the user asks for specific information. "
@@ -181,9 +198,9 @@ async def _langchain_without_streaming(
     langfuse_handler = CallbackHandler()
 
     llm = ChatOllama(
-        model="llama3.1:8b", # Ensure you have run 'ollama pull llama3.1'
-        temperature=TEMPERATURE,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+        model=settings.OLLAMA_PRIMARY_MODEL, # Ensure you have run 'ollama pull llama3.1'
+        temperature=settings.OLLAMA_TEMPERATURE,
+        base_url=settings.OLLAMA_BASE_URL,
         callbacks=[token_tracker, RequestLogger()]
     )
 
@@ -253,12 +270,20 @@ async def _langchain_with_streaming(chat_id, prompt, log_prefix):
     token_tracker = SimpleTokenTracker(log_prefix=log_prefix)
     langfuse_handler = CallbackHandler()
     mcp_client = get_mcp_client()
-    client = MultiServerMCPClient(mcp_client._server_config())
+
+    try:
+        server_config = await mcp_client._server_config()
+    except Exception as e:
+        logger.error(f"{log_prefix} Failed to get MCP auth token: {e}")
+        yield f"data: {json.dumps({'type': 'error', 'content': 'Authentication failed. Please try again.'})}\n\n"
+        return
+    
+    client = MultiServerMCPClient(server_config)
 
     checkpointer = get_checkpointer()
     config = _make_memory_config(chat_id)
     existing = await checkpointer.aget_tuple(config)
-    
+      
     if existing is not None:
         messages_in_memory = existing.checkpoint.get("channel_values", {}).get("messages", [])
         logger.info(f"{log_prefix} Postgres memory warm: {len(messages_in_memory)} messages")
@@ -300,14 +325,12 @@ async def _langchain_with_streaming(chat_id, prompt, log_prefix):
                         tool_called = True
                         sent_any = True
                         tool_input = event.get("data", {}).get("input", {})
-                        logger.info(f"{log_prefix} Tool: {event.get('name')} args={tool_input}")
                         query = tool_input.get("query", "")
                         payload = {'type': 'status', 'content': f"Searching for '{query}'..." if query else "Searching..."}
                         yield f"data: {json.dumps(payload)}\n\n"
 
                     elif kind == "on_tool_end":
                         tool_called = False
-                        logger.info(f"{log_prefix} Tool result: {str(event.get('data', {}).get('output', ''))[:200]}")
                         yield f"data: {json.dumps({'type': 'status', 'content': 'Finished'})}\n\n"
 
                     elif kind == "on_chat_model_stream" and not tool_called:
@@ -349,7 +372,6 @@ async def generate_response_stream(
         prompt: User message
         request_id: Request ID for logging
         correlation_id: Correlation ID for logging
-        use_langchain: If True, use LangChain agent; if False, use original logic
 
     Returns:
         Yield response chunks
@@ -368,12 +390,7 @@ async def generate_response_stream(
             status_code=403,
             detail="Unauthorized access to chat session"
         )
-    # prepared_messages = await prepare_chat_history(
-    #     user_id=None,
-    #     chat_id=chat_id,
-    #     log_prefix=log_prefix
-    # )
-    # history_messages = prepared_messages.langchain_messages
+    
     full_response_content = []
     had_error = False
     try:
