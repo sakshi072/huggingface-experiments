@@ -5,6 +5,7 @@ from typing import Optional, List, Callable
 from contextlib import AsyncExitStack
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from app.models.mcp import MCPClientConfig
+from app.infrastructure.auth.token_manager import get_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -18,11 +19,13 @@ class MCPClientSSL:
         self._lock = asyncio.Lock()
         logger.info(f"MCP Client initialized for {self.config.mcp_server_url}")
 
-    def _server_config(self) -> dict:
+    async def _server_config(self) -> dict:
+        token = await get_access_token('RETRIEVAL_MCP')
         return {
             "knowledge": {
                 "url": self.config.mcp_server_url,
-                "transport": "sse",
+                "transport": "streamable_http",
+                "headers": {"Authorization": f"Bearer {token}"},
             }
         }
 
