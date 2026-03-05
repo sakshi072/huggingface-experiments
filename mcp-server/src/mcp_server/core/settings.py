@@ -16,10 +16,21 @@ class Settings(BaseSettings):
     AUTH0_CLIENT_SECRET: str
     AUTH0_CLIENT_ID: str
 
+    AUTH0_LANGCHAIN_CLIENT_DOMAIN:str
+    AUTH0_LANGCHAIN_CLIENT_AUDIENCE:str
+
     @property
     def auth0_token_url(self) -> str:
         """Auto-computed JWKS URL"""
         return f"https://{self.AUTH0_DOMAIN}/oauth/token"
+    @property
+    def auth0_langchain_jwks_url(self) -> str:
+        """Auto-computed JWKS URL"""
+        return f"https://{self.AUTH0_DOMAIN}/.well-known/jwks.json"
+    @property
+    def auth0_langchain_issuer(self) -> str:
+        """Auto-computed JWKS URL"""
+        return f"https://{self.AUTH0_DOMAIN}/"
 
     model_config = SettingsConfigDict(env_file=".env", extra='ignore')
 

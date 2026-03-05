@@ -6,7 +6,6 @@ from pydantic import Field
 import ssl
 import os
 import logging
-from mcp.server.fastmcp import Context
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -19,7 +18,6 @@ class DomainOptions(str, Enum):
     HEALTHCARE = "healthcare"
     MEDICAL = "medical"
     LEGAL = "legal"
-    TECHNICAL = "technical"
     MACHINE_LEARNING = "machine-learning"
 
 def _create_ssl_context() -> ssl.SSLContext:
@@ -69,9 +67,8 @@ def _get_ssl_context() -> ssl.SSLContext:
 
 async def search_knowledge_base(
     query: Annotated[str, Field(description="The search query string", min_length=1)],
-    top_k: Annotated[int, Field(default=3, gt=0, le=10, description="Number of results to return")],
     domain_name: DomainOptions,
-    ctx: Context
+    top_k: Annotated[int, Field(default=3, gt=0, le=10, description="Number of results to return")] = 3,
 ) -> str:
     """Semantic search across all documents available."""
     token = await get_token()

@@ -79,6 +79,16 @@ spec:
               secretKeyRef:
                 name: mcp-server-secrets
                 key: AUTH0_CLIENT_SECRET
+          - name: AUTH0_LANGCHAIN_CLIENT_DOMAIN
+            valueFrom:
+              secretKeyRef:
+                name: mcp-server-secrets
+                key: AUTH0_LANGCHAIN_CLIENT_DOMAIN
+          - name: AUTH0_LANGCHAIN_CLIENT_AUDIENCE
+            valueFrom:
+              secretKeyRef:
+                name: mcp-server-secrets
+                key: AUTH0_LANGCHAIN_CLIENT_AUDIENCE
           - name: TLS_CA_CERT
             value: "/etc/mcp/certs/ca.crt"
           - name: TLS_SERVER_CERT
