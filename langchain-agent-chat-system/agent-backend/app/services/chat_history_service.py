@@ -8,7 +8,7 @@ from app.models import HistoryMessage
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
-import os
+from app.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -45,13 +45,12 @@ def _convert_mongo_to_langchain(mongo_messages: List[HistoryMessage]) -> List:
 async def _summarize_history(
     messages: List,
     existing_summary: Optional[str],
-    log_prefix:str
 ) -> str:
     """Compress old messages into a summary, keep recent ones verbatim"""
     llm = ChatOllama(
         model="llama3.1:8b", # Ensure you have run 'ollama pull llama3.1'
         temperature=0,
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:9999"),
+        base_url=settings.OLLAMA_BASE_URL,
     )
 
     summary_prompt = ChatPromptTemplate.from_messages([
@@ -84,8 +83,7 @@ async def get_compressed_history(mongo_messages:List[HistoryMessage], chat_id:st
 
     summary = await _summarize_history(
         _convert_mongo_to_langchain(old_messages),
-        existing_summary=None,
-        log_prefix=log_prefix
+        existing_summary=None
     )
     logger.info(f"Compressed summary example: {summary}")
     compressed = [

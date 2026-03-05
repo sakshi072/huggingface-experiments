@@ -1,24 +1,21 @@
-import os
 import logging
 from typing import Dict, Optional
 from pymongo import MongoClient
 from pymongo.server_api import ServerApi
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 from contextlib import contextmanager
-from dotenv import load_dotenv
-
-load_dotenv()
+from app.core.settings import settings
 
 logger = logging.getLogger("LangChainBackend")
 
 # --- MongoDB Configuration ---
-MONGO_URI = os.getenv("MONGO_URI")
-DB_NAME = os.getenv("MONGO_DB_NAME")
+MONGO_URI = settings.MONGO_URI
+DB_NAME = settings.MONGO_DB_NAME
 
 MONGO_POOL_CONFIG = {
     # Connection Pool Size
-    "maxPoolSize": int(os.getenv("MONGO_MAX_POOL_SIZE", "50")),
-    "minPoolSize": int(os.getenv("MONGO_MIN_POOL_SIZE", "10")),
+    "maxPoolSize": settings.MONGO_MAX_POOL_SIZE,
+    "minPoolSize": settings.MONGO_MIN_POOL_SIZE,
 
     # Connection Timeouts (milliseconds)
     "connecttimeoutms": 10000, # 10 seconds to establish connection

@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 logger = logging.getLogger(__name__)
 from psycopg_pool import AsyncConnectionPool
-from app.core.config import POSTGRES_URI
+from app.core.settings import settings
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 __pool: Optional[AsyncConnectionPool] = None
@@ -16,7 +16,7 @@ async def init_checkpointer() -> AsyncPostgresSaver:
     global _checkpointer, __pool
 
     _pool = AsyncConnectionPool(
-        conninfo=POSTGRES_URI,
+        conninfo=settings.POSTGRES_URI,
         max_size=10,
         min_size=2,
         kwargs={"autocommit": True}

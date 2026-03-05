@@ -12,7 +12,7 @@ import time
 import logging
 import asyncio
 from typing import Optional
-
+from app.core.settings import settings
 import httpx
 from pydantic import BaseModel, Field
 
@@ -22,59 +22,59 @@ logger = logging.getLogger(__name__)
 # Configuration Models
 # ============================================================================
 
-class Auth0Config(BaseModel):
-    """Auth0 configuration for Client Credentials flow"""
+# class Auth0Config(BaseModel):
+#     """Auth0 configuration for Client Credentials flow"""
 
-    domain: str = Field(..., description="Auth0 tenant domain")
-    client_id: str = Field(..., description="M2M application client ID")
-    client_secret: str = Field(..., description="M2M application client secret")
-    audience: str = Field(..., description="API identifier")
-    token_url: Optional[str] = Field(None, description="Token endpoint URL")
+#     domain: str = Field(..., description="Auth0 tenant domain")
+#     client_id: str = Field(..., description="M2M application client ID")
+#     client_secret: str = Field(..., description="M2M application client secret")
+#     audience: str = Field(..., description="API identifier")
+#     token_url: Optional[str] = Field(None, description="Token endpoint URL")
 
-    def __init__(self, **data):
-        """Initialize with data or from environment"""
-        # If no data provided, load from environment
-        if not data:
-            data = {
-                "domain": os.getenv("AUTH0_DOMAIN", ""),
-                "client_id": os.getenv("CLIENT_ID", ""),
-                "client_secret": os.getenv("CLIENT_SECRET", ""),
-                "audience": os.getenv("AUDIENCE", ""),  # M2M audience!
-            }
+#     def __init__(self, **data):
+#         """Initialize with data or from environment"""
+#         # If no data provided, load from environment
+#         if not data:
+#             data = {
+#                 "domain": os.getenv("AUTH0_DOMAIN", ""),
+#                 "client_id": os.getenv("CLIENT_ID", ""),
+#                 "client_secret": os.getenv("CLIENT_SECRET", ""),
+#                 "audience": os.getenv("AUDIENCE", ""),  # M2M audience!
+#             }
         
-        # Call parent __init__
-        super().__init__(**data)
+#         # Call parent __init__
+#         super().__init__(**data)
         
-        # Auto-construct token URL if not provided
-        if not self.token_url:
-            self.token_url = f"https://{self.domain}/oauth/token"
+#         # Auto-construct token URL if not provided
+#         if not self.token_url:
+#             self.token_url = f"https://{self.domain}/oauth/token"
     
-    @classmethod
-    def from_env(cls) -> "Auth0Config":
-        """Load configuration from environment variables"""
-        return cls(
-            domain=os.getenv("AUTH0_DOMAIN", ""),
-            client_id=os.getenv("CLIENT_ID", ""),
-            client_secret=os.getenv("CLIENT_SECRET", ""),
-            audience=os.getenv("AUDIENCE", ""),  # M2M audience
-        )
+#     @classmethod
+#     def from_env(cls) -> "Auth0Config":
+#         """Load configuration from environment variables"""
+#         return cls(
+#             domain=os.getenv("AUTH0_DOMAIN", ""),
+#             client_id=os.getenv("CLIENT_ID", ""),
+#             client_secret=os.getenv("CLIENT_SECRET", ""),
+#             audience=os.getenv("AUDIENCE", ""),  # M2M audience
+#         )
     
-    def validate_config(self) -> tuple[bool, str]:
-        """
-        Validate configuration is complete
+#     def validate_config(self) -> tuple[bool, str]:
+#         """
+#         Validate configuration is complete
         
-        Returns:
-            (is_valid, error_message)
-        """
-        if not self.domain:
-            return False, "AUTH0_DOMAIN is required"
-        if not self.client_id:
-            return False, "AUTH0_CLIENT_ID is required"
-        if not self.client_secret:
-            return False, "AUTH0_CLIENT_SECRET is required"
-        if not self.audience:
-            return False, "AUTH0_M2M_AUDIENCE is required"
-        return True, ""
+#         Returns:
+#             (is_valid, error_message)
+#         """
+#         if not self.domain:
+#             return False, "AUTH0_DOMAIN is required"
+#         if not self.client_id:
+#             return False, "AUTH0_CLIENT_ID is required"
+#         if not self.client_secret:
+#             return False, "AUTH0_CLIENT_SECRET is required"
+#         if not self.audience:
+#             return False, "AUTH0_M2M_AUDIENCE is required"
+#         return True, ""
 
 
 class TokenResponse(BaseModel):
@@ -101,32 +101,32 @@ class Auth0TokenManager:
     - Retry logic for transient failures
     """
 
-    def __init__(self, config: Auth0Config):
+    def __init__(self, service:str):
         """
         Initialize token manager
         
         Args:
             config: Auth0 configuration
         """
-        self.config = config
         
         # Token cache
         self._access_token: Optional[str] = None
         self._expires_at: Optional[float] = None
         self._token_scope: Optional[str] = None
+        self.service:str = service
 
         # Thread safety
         self._lock = asyncio.Lock()
 
         # Validate configuration
-        is_valid, error = config.validate_config()
-        if not is_valid:
-            raise ValueError(f"Invalid Auth0 configuration: {error}")
+        # is_valid, error = config.validate_config()
+        # if not is_valid:
+        #     raise ValueError(f"Invalid Auth0 configuration: {error}")
         
         logger.info("✅ Auth0 Token Manager initialized")
-        logger.info(f"   Domain: {config.domain}")
-        logger.info(f"   Client ID: {config.client_id[:8]}...")
-        logger.info(f"   Audience: {config.audience}")
+        logger.info(f"   Domain: {getattr(settings, f'{service}_DOMAIN', None)}")
+        logger.info(f"   Client ID: {getattr(settings, f'{service}_CLIENT_ID', None)}...")
+        logger.info(f"   Audience: {getattr(settings, f'{service}_AUDIENCE', None)}")
     
     @property
     def is_token_valid(self) -> bool:
@@ -202,10 +202,21 @@ class Auth0TokenManager:
         """
         logger.info("🔄 Fetching new access token from Auth0...")
 
+        # request_payload = {
+        #     "client_id": self.config.client_id,
+        #     "client_secret": self.config.client_secret,
+        #     "audience": self.config.audience,
+        #     "grant_type": "client_credentials"
+        # }
+        logger.info("✅ Auth0 Token Manager initialized")
+        logger.info(f"   Client ID: {getattr(settings, f'{self.service}_CLIENT_ID', None)}")
+        logger.info(f"   Client Secret: {getattr(settings, f'{self.service}_CLIENT_SECRET')}")
+        logger.info(f"   Audience: {getattr(settings, f'{self.service}_AUDIENCE', None)}")
+        logger.info(f"   Token URL: {getattr(settings, f'{self.service.lower()}_token_url', None)}")
         request_payload = {
-            "client_id": self.config.client_id,
-            "client_secret": self.config.client_secret,
-            "audience": self.config.audience,
+            "client_id": getattr(settings, f'{self.service}_CLIENT_ID', None),
+            "client_secret": getattr(settings, f'{self.service}_CLIENT_SECRET', None),
+            "audience": getattr(settings, f'{self.service}_AUDIENCE', None),
             "grant_type": "client_credentials"
         }
 
@@ -215,7 +226,7 @@ class Auth0TokenManager:
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.post(
-                        self.config.token_url,
+                        getattr(settings, f'{self.service.lower()}_token_url', None),
                         json=request_payload,
                         headers={"Content-Type": "application/json"}
                     )
@@ -313,7 +324,7 @@ class Auth0TokenManager:
 _token_manager: Optional[Auth0TokenManager] = None
 
 
-def get_token_manager() -> Auth0TokenManager:
+def get_token_manager(service:str) -> Auth0TokenManager:
     """
     Get global token manager instance (singleton pattern)
     
@@ -323,8 +334,8 @@ def get_token_manager() -> Auth0TokenManager:
     global _token_manager
 
     if _token_manager is None:
-        config = Auth0Config.from_env()
-        _token_manager = Auth0TokenManager(config)
+        # config = Auth0Config.from_env()
+        _token_manager = Auth0TokenManager(service)
     
     return _token_manager
 
@@ -333,14 +344,14 @@ def get_token_manager() -> Auth0TokenManager:
 # Convenience Functions
 # ============================================================================
 
-async def get_access_token() -> str:
+async def get_access_token(service:str) -> str:
     """
     Get current access token (convenience function)
     
     Returns:
         Valid access token
     """
-    manager = get_token_manager()
+    manager = get_token_manager(service)
     return await manager.get_access_token()
 
 

@@ -5,7 +5,7 @@ class MCPClientConfig(BaseModel):
     """MCP Client configuration"""
 
     mcp_server_url: str = Field(
-        default="http://mcp-server:8002/mcp/sse",
+        default="http://mcp-server:8002/mcp",
         description="Secure MCP server URL"
     )
     ca_cert_path: str = Field(default="/etc/mcp/client-certs/ca.crt")
@@ -18,7 +18,7 @@ class MCPClientConfig(BaseModel):
     def from_env(cls) -> "MCPClientConfig":
         """Load config from environment variables"""
         return cls(
-            mcp_server_url=os.getenv("MCP_SERVER_URL", "http://mcp-server:8002/mcp/sse"),
+            mcp_server_url=os.getenv("MCP_SERVER_URL", "http://mcp-server:8002/mcp"),
             ca_cert_path=os.getenv("MCP_TLS_CA_CERT", "/etc/mcp/client-certs/ca.crt"),
             client_cert_path=os.getenv("MCP_TLS_CLIENT_CERT", "/etc/mcp/client-certs/tls.crt"),
             client_key_path=os.getenv("MCP_TLS_CLIENT_KEY", "/etc/mcp/client-certs/tls.key"),

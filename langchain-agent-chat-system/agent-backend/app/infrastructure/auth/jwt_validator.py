@@ -20,39 +20,39 @@ from jose.exceptions import ExpiredSignatureError, JWTClaimsError
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic_settings import BaseSettings
-
+from app.core.settings import settings
 logger = logging.getLogger("Auth")
 
-class Auth0Config(BaseSettings):
-    """Auth0 configuration from environment variables"""
+# class Auth0Config(BaseSettings):
+#     """Auth0 configuration from environment variables"""
     
-    AUTH0_DOMAIN: str
-    AUTH0_AUDIENCE: str
-    AUTH0_ALGORITHMS: str = "RS256"
+#     AUTH0_DOMAIN: str
+#     AUTH0_AUDIENCE: str
+#     AUTH0_ALGORITHMS: str = "RS256"
 
-    class Config: 
-        env_file = ".env"
-        case_sensitive = True
-        extra = "allow"
+#     class Config: 
+#         env_file = ".env"
+#         case_sensitive = True
+#         extra = "allow"
 
-    @property
-    def issuer(self) -> str:
-        """Construct issuer URL from domain"""
-        return f"https://{self.AUTH0_DOMAIN}/"
-    @property
-    def jwks_url(self) -> str:
-        return f"https://{self.AUTH0_DOMAIN}/.well-known/jwks.json"
-    @property
-    def alogirthm_list(self) -> list[str]:
-        return [alg.strip() for alg in self.AUTH0_ALGORITHMS.split(",")]
+#     @property
+#     def issuer(self) -> str:
+#         """Construct issuer URL from domain"""
+#         return f"https://{self.AUTH0_DOMAIN}/"
+#     @property
+#     def jwks_url(self) -> str:
+#         return f"https://{self.AUTH0_DOMAIN}/.well-known/jwks.json"
+#     @property
+#     def alogirthm_list(self) -> list[str]:
+#         return [alg.strip() for alg in self.AUTH0_ALGORITHMS.split(",")]
     
 
-try:
-    auth0_config = Auth0Config()
-    logger.info(f"Auth0 configured: domain={auth0_config.AUTH0_DOMAIN}, audience={auth0_config.AUTH0_AUDIENCE}")
-except Exception as e:
-    logger.error(f"Failed to load Auth0 configuration: {e}")
-    raise
+# try:
+#     auth0_config = Auth0Config()
+#     logger.info(f"Auth0 configured: domain={auth0_config.AUTH0_DOMAIN}, audience={auth0_config.AUTH0_AUDIENCE}")
+# except Exception as e:
+#     logger.error(f"Failed to load Auth0 configuration: {e}")
+#     raise
 
 # --- JWKS Cache ---
 
@@ -96,7 +96,7 @@ class JWKSCache:
             logger.info("Fetching JWKS from Auth...")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    auth0_config.jwks_url,
+                    settings.auth0_jwks_url,
                     timeout=10.0
                 )
                 response.raise_for_status()
@@ -188,9 +188,9 @@ async def verify_token(
         payload = jwt.decode(
             token,
             rsa_key,
-            algorithms=auth0_config.alogirthm_list,
-            audience=auth0_config.AUTH0_AUDIENCE,
-            issuer=auth0_config.issuer,
+            algorithms=settings.auth0_alogirthm_list,
+            audience=settings.UI_AUTH0_AUDIENCE,
+            issuer=settings.auth0_issuer,
         )
 
         logger.debug(f"Token verified for user: {payload.get('sub', 'unknown')[:8]}...")

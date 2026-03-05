@@ -1,8 +1,8 @@
 """Title service - handles smart title generation."""
 from starlette.concurrency import run_in_threadpool
 import logging
-
-from app.core.config import HF_CLIENT, MODEL_ID
+from app.core.settings import settings
+from app.core.config import HF_CLIENT
 
 logger = logging.getLogger("LangChainBackend")
 
@@ -52,7 +52,7 @@ async def generate_smart_title(
 
         completion = await run_in_threadpool(
             lambda: HF_CLIENT.chat.completions.create(
-                model=MODEL_ID,
+                model=settings.HF_MODEL_ID,
                 messages=title_context,
                 max_tokens=30,
                 temperature=0.7,

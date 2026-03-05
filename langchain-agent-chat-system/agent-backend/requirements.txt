@@ -9,6 +9,7 @@ motor
 python-jose[cryptography]
 python-dotenv
 pydantic
+pydantic-settings
 sentence-transformers
 torch
 langfuse

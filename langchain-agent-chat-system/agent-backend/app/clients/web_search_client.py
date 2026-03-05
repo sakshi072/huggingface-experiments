@@ -5,14 +5,11 @@ This module provides the web search functionality needed by the job search tool.
 It can be integrated with various search APIs (Tavily, SerpAPI, etc.)
 """
 
-import os
 import logging
 from typing import List, Dict, Optional
 import httpx
-from dotenv import load_dotenv
+from app.core.settings import settings
 
-
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 class WebSearchClient:
@@ -51,7 +48,7 @@ class WebSearchClient:
         env_var = key_map.get(self.provider)
         if not env_var:
             return None
-        return os.getenv(env_var)
+        return settings.TAVILY_API_KEY
 
     async def search(
         self,

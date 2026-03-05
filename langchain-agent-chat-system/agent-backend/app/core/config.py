@@ -3,7 +3,7 @@ import logging
 from typing import Dict
 from huggingface_hub import InferenceClient
 from dotenv import load_dotenv
-
+from app.core.settings import settings
 load_dotenv()
 
 # --- Logging Setup ---
@@ -11,15 +11,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger("LangChainBackend")
 
 # --- Configuration ---
-HF_TOKEN = os.getenv("HF_TOKEN", "")
-MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
-API_BASE_URL = "https://router.huggingface.co/v1/"
-MAX_TOKENS = 1024
-TEMPERATURE = 0.1
-POSTGRES_URI = os.getenv(
-    "POSTGRES_URI",
-    ""
-)
+# HF_TOKEN = os.getenv("HF_TOKEN", "")
+# MODEL_ID = "meta-llama/Llama-3.2-3B-Instruct"
+# API_BASE_URL = "https://router.huggingface.co/v1/"
+# MAX_TOKENS = 1024
+# TEMPERATURE = 0.1
+# POSTGRES_URI = os.getenv(
+#     "POSTGRES_URI",
+#     ""
+# )
 
 # --- System Message ---
 SYSTEM_MESSAGE_INFERENCE: Dict[str, str] = {
@@ -30,14 +30,14 @@ SYSTEM_MESSAGE_INFERENCE: Dict[str, str] = {
 # --- Hugging Face Client Initialization ---
 def initialize_hf_client() -> InferenceClient | None:
     """Initializes and returns the Hugging Face InferenceClient."""
-    if not HF_TOKEN:
+    if not settings.HF_TOKEN:
         logger.error("FATAL: HF_TOKEN environment variable not set in backend.")
         return None
 
     try:
         client = InferenceClient(
-            base_url=API_BASE_URL,
-            api_key=HF_TOKEN
+            base_url=settings.HF_API_BASE_URL,
+            api_key=settings.HF_TOKEN
         )
         logger.info("Hugging Face InferenceClient initialized.")
         return client
