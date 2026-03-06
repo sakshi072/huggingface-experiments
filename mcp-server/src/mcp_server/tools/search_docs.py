@@ -19,6 +19,7 @@ class DomainOptions(str, Enum):
     MEDICAL = "medical"
     LEGAL = "legal"
     MACHINE_LEARNING = "machine-learning"
+    TEST = "test"
 
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
@@ -68,7 +69,17 @@ def _get_ssl_context() -> ssl.SSLContext:
 async def search_knowledge_base(
     query: Annotated[str, Field(description="The search query string", min_length=1)],
     domain_name: DomainOptions,
-    top_k: Annotated[int, Field(default=3, gt=0, le=10, description="Number of results to return")] = 3,
+    top_k: Annotated[
+        int, 
+        Field(
+            default=3, 
+            gt=0, 
+            le=10, 
+            description="Number of results to return",
+            serialization_alias="top_k",  # Force the name in output
+            validation_alias="top_k"     # Force the name in input
+        )
+    ] = 3,
 ) -> str:
     """Semantic search across all documents available."""
     token = await get_token()
@@ -76,6 +87,7 @@ async def search_knowledge_base(
 
     target_url = f"{settings.RETRIEVAL_BASE_URL}/search"
     logger.info(f"🚀 RAG Request: {target_url}")
+    logger.info(query, domain_name, top_k)
 
     async with httpx.AsyncClient(base_url=str(settings.RETRIEVAL_BASE_URL), timeout=30.0, verify=ssl_context) as client:
         response = await client.post(
