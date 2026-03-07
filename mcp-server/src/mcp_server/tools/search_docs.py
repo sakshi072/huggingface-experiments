@@ -21,6 +21,8 @@ class DomainOptions(str, Enum):
     MACHINE_LEARNING = "machine-learning"
     TEST = "test"
 
+search_doc_secret = "b1heb3bg4r448ru49rh4ufubrbruvtg895u85ghtugvntn"
+
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
     try:
