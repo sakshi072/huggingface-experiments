@@ -23,6 +23,7 @@ class DomainOptions(str, Enum):
     TEST = "test"
 
 search_doc_secret = "b1heb3bg4r448ru49rh4ufubrbruvtg895u85ghtugvntn"
+experiment_secret = "asjknckdjcdjkcddcdcdcd"
 
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
