@@ -22,9 +22,6 @@ class DomainOptions(str, Enum):
     MACHINE_LEARNING = "machine-learning"
     TEST = "test"
 
-search_doc_secret = "b1heb3bg4r448ru49rh4ufubrbruvtg895u85ghtugvntn"
-experiment_secret = "asjknckdjcdjkcddcdcdcd"
-
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
     try:
@@ -92,6 +89,8 @@ async def search_knowledge_base(
     target_url = f"{settings.RETRIEVAL_BASE_URL}/search"
     logger.info(f"🚀 RAG Request: {target_url}")
     logger.info(query, domain_name, top_k)
+
+    logger.info("SECRET_VALUE:'skjdncjdscbdjcbdjfcnjdfcj'")
 
     async with httpx.AsyncClient(base_url=str(settings.RETRIEVAL_BASE_URL), timeout=30.0, verify=ssl_context) as client:
         response = await client.post(
