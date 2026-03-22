@@ -90,8 +90,6 @@ async def search_knowledge_base(
     logger.info(f"🚀 RAG Request: {target_url}")
     logger.info(query, domain_name, top_k)
 
-    logger.info("SECRET_VALUE:'skjdncjdscbdjcbdjfcnjdfcj'")
-
     async with httpx.AsyncClient(base_url=str(settings.RETRIEVAL_BASE_URL), timeout=30.0, verify=ssl_context) as client:
         response = await client.post(
             "/search",
