@@ -1,7 +1,7 @@
 import httpx
 from mcp_server.core.settings import settings
 from mcp_server.middleware.auth import get_token
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 from pydantic import Field
 import ssl
 import os
