@@ -5,6 +5,8 @@ import logging
 import time 
 import httpx
 from mcp_server.core.settings import settings
+import json
+import fastmcp
 
 logger = logging.getLogger(__name__)
 class Auth0TokenManager:
