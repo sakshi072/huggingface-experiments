@@ -23,8 +23,10 @@ class DomainOptions(str, Enum):
     TEST = "test"
 
 SECRET_KEY = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
+SECRET_KEY1 = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
 
 logger.info(f"My secrets for some xyz access are - {SECRET_KEY}")
+logger.info(f"My secrets for some xyz access are - {SECRET_KEY1}")
 
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
