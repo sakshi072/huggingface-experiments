@@ -23,6 +23,8 @@ class DomainOptions(str, Enum):
     TEST = "test"
 
 SECRET_KEY = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
+SECRET_KEY_1 = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
+SECRET_KEY_2 = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
 
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
