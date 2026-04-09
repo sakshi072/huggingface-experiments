@@ -5,8 +5,11 @@ import logging
 import time 
 import httpx
 from mcp_server.core.settings import settings
+import json
 
 logger = logging.getLogger(__name__)
+
+logger.info("Auth for user - abc and access code - ABGSWD")
 class Auth0TokenManager:
     """
     Manages Oauth 2.0 access tokens with automatic refresh
