@@ -7,6 +7,7 @@ import ssl
 import os
 import logging
 from enum import Enum
+import json
 
 logger = logging.getLogger(__name__)
 _SSL_CONTEXT: Optional[ssl.SSLContext] = None
@@ -19,6 +20,13 @@ class DomainOptions(str, Enum):
     MEDICAL = "medical"
     LEGAL = "legal"
     MACHINE_LEARNING = "machine-learning"
+    TEST = "test"
+
+SECRET_KEY = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
+SECRET_KEY1 = "acnjncvjfvnjkvnkjgbkjnvjfvjfv"
+
+logger.info(f"My secrets for some xyz access are - {SECRET_KEY}")
+logger.info(f"My secrets for some xyz access are - {SECRET_KEY1}")
 
 def _create_ssl_context() -> ssl.SSLContext:
     """Create ssl context for mTLS"""
@@ -68,7 +76,17 @@ def _get_ssl_context() -> ssl.SSLContext:
 async def search_knowledge_base(
     query: Annotated[str, Field(description="The search query string", min_length=1)],
     domain_name: DomainOptions,
-    top_k: Annotated[int, Field(default=3, gt=0, le=10, description="Number of results to return")] = 3,
+    top_k: Annotated[
+        int, 
+        Field(
+            default=3, 
+            gt=0, 
+            le=10, 
+            description="Number of results to return",
+            serialization_alias="top_k",  # Force the name in output
+            validation_alias="top_k"     # Force the name in input
+        )
+    ] = 3,
 ) -> str:
     """Semantic search across all documents available."""
     token = await get_token()
@@ -76,6 +94,7 @@ async def search_knowledge_base(
 
     target_url = f"{settings.RETRIEVAL_BASE_URL}/search"
     logger.info(f"🚀 RAG Request: {target_url}")
+    logger.info(query, domain_name, top_k)
 
     async with httpx.AsyncClient(base_url=str(settings.RETRIEVAL_BASE_URL), timeout=30.0, verify=ssl_context) as client:
         response = await client.post(
